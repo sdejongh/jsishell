@@ -1,0 +1,30 @@
+# Test configuration for JSIShell
+# This file is used in tests to verify config loading
+
+# Shell prompt
+prompt: "test> "
+
+# History settings
+history:
+  max_size: 100
+  file: "~/.jsishell_test_history"
+  ignore_duplicates: true
+  ignore_space_prefix: true
+
+# Color scheme settings
+colors:
+  enabled: false
+  directory: "blue"
+  file: "white"
+  executable: "green"
+  error: "red"
+  warning: "yellow"
+  ghost_text: "bright_black"
+
+# Abbreviation settings
+abbreviations:
+  enabled: true
+
+# Editor settings
+editor:
+  tab_width: 4

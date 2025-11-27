@@ -1,0 +1,62 @@
+# JSI Shell Configuration
+# ======================
+# Place this file at ~/.config/jsishell/config.yaml
+# Or set XDG_CONFIG_HOME to use a custom config directory
+
+# Shell prompt
+# The string displayed before each command input
+prompt: "$ "
+
+# History settings
+history:
+  # Maximum number of commands to keep in history
+  max_size: 1000
+
+  # History file location
+  # Supports ~ for home directory expansion
+  file: "~/.config/jsishell/.jsishell_history"
+
+  # Don't save duplicate consecutive commands
+  ignore_duplicates: true
+
+  # Don't save commands starting with a space
+  # Useful for sensitive commands you don't want in history
+  ignore_space_prefix: true
+
+# Color scheme settings
+colors:
+  # Enable/disable colors globally
+  # Also respects the NO_COLOR environment variable
+  enabled: true
+
+  # Available colors:
+  #   black, red, green, yellow, blue, magenta, cyan, white
+  #   bright_black, bright_red, bright_green, bright_yellow
+  #   bright_blue, bright_magenta, bright_cyan, bright_white
+
+  # Prompt color
+  prompt: "green"
+
+  # Directory listing colors
+  directory: "blue"
+  file: "white"
+  executable: "bright_green"
+  symlink: "cyan"
+
+  # Message colors
+  error: "red"
+  warning: "yellow"
+  success: "green"
+
+  # Autocompletion ghost text color
+  ghost_text: "bright_black"
+
+# Command abbreviations
+abbreviations:
+  # Enable command abbreviations (e.g., 'l' for 'list' if unambiguous)
+  enabled: true
+
+# Line editor settings
+editor:
+  # Tab width for indentation
+  tab_width: 4

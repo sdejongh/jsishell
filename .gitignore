@@ -1,0 +1,44 @@
+# Binaries
+jsishell
+jsishell-linux
+jsishell-darwin
+jsishell.exe
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with 'go test -c'
+*.test
+
+# Coverage files
+coverage.out
+coverage.html
+*.coverprofile
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Debug files
+__debug_bin
+debug
+
+# Build directories
+dist/
+build/
+
+# Local configuration (user-specific)
+*.local.yaml
+*.local.yml
