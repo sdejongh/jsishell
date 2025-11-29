@@ -2,9 +2,12 @@
 
 **Feature Branch**: `001-shell-interpreter`
 **Created**: 2025-01-25
-**Completed**: 2025-11-27
-**Status**: Complete (v1.0.0)
+**Status**: Active Development (on-demand)
 **Input**: User description: "Command line interpreter and programming language for OS interaction with file system management, program execution, consistent syntax, color display, autocompletion, and YAML configuration"
+
+## Development Approach
+
+This project follows an **on-demand development** approach. There is no fixed roadmap. Features and improvements are implemented as requested by the user.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -214,18 +217,18 @@ As a user, I want to access and search my command history so that I can quickly 
 - **FR-014**: Command and argument names MUST use English words that clearly describe their function
 - **FR-015**: System MUST use consistent argument naming across all commands (e.g., `--recursive` not sometimes `--recurse`)
 
-#### Natural Language Command Structure
+#### Command Structure
 
-- **FR-049**: Commands MUST follow a natural language structure: `<verb> <subject> [destination]` (e.g., `move file.txt /backup/`, `copy source.txt destination.txt`, `remove oldfile.txt`)
-- **FR-050**: Command names MUST be intuitive English verbs that describe the action (e.g., `move` not `mv`, `copy` not `cp`, `remove` not `rm`, `list` not `ls`)
-- **FR-051**: Arguments MUST follow a logical order matching natural language (source before destination, subject before modifiers)
+- **FR-049**: Commands follow standard Unix naming convention (`cd`, `ls`, `cp`, `mv`, `rm`, `mkdir`, `pwd`)
+- **FR-050**: Command syntax follows standard shell conventions: `<command> [options] [arguments]`
+- **FR-051**: Arguments follow standard Unix order (source before destination for file operations)
 
 #### Command Abbreviation (Unambiguous Prefix Matching)
 
 - **FR-052**: System MUST accept abbreviated command names when the prefix uniquely identifies a single command
-- **FR-053**: If user types `l` and only `list` starts with `l`, the system MUST execute `list`
-- **FR-054**: If user types an ambiguous prefix (e.g., `c` matching both `copy` and `clear`), the system MUST display an error listing all matching commands
-- **FR-055**: User MUST type enough characters to disambiguate (e.g., `co` for `copy`, `cl` for `clear`)
+- **FR-053**: If user types `l` and only `ls` starts with `l`, the system MUST execute `ls`
+- **FR-054**: If user types an ambiguous prefix (e.g., `c` matching `cd`, `cp`, `clear`), the system MUST display an error listing all matching commands
+- **FR-055**: User MUST type enough characters to disambiguate (e.g., `cp` for `cp`, `cl` for `clear`, `cd` for `cd`)
 - **FR-056**: Abbreviation matching MUST apply only to built-in commands, not external programs
 - **FR-057**: System MUST provide a configuration option to disable abbreviation matching for users who prefer explicit commands
 
@@ -297,8 +300,8 @@ As a user, I want to access and search my command history so that I can quickly 
 
 #### Built-in Commands (Phased)
 
-- **FR-043**: Phase 1 (MVP): System MUST provide these built-in commands: `goto`, `here`, `list`, `copy`, `move`, `remove`, `makedir`, `exit`, `help`, `clear`, `echo`, `env`
-- **FR-044**: Future Phase: System MUST provide extended built-in commands: `cat`, `touch`, `find`, `grep`, `which`, `type`, `export`, `unset`
+- **FR-043**: System provides these built-in commands: `cd`, `pwd`, `ls`, `cp`, `mv`, `rm`, `mkdir`, `exit`, `help`, `clear`, `echo`, `env`, `reload`, `history`
+- **FR-044**: Additional commands may be added on-demand as requested
 
 #### Job Control (Phased)
 
@@ -420,36 +423,23 @@ As a user, I want to access and search my command history so that I can quickly 
 
 ---
 
-## Implementation Summary (2025-11-27)
-
-### Final Statistics
-
-| Metric | Value |
-|--------|-------|
-| **Total Lines of Code** | ~15,000 |
-| **Source Code (excl. tests)** | 6,534 lines |
-| **Test Code** | 8,460 lines |
-| **Total Files** | 70 |
-| **Go Packages** | 11 |
-| **Built-in Commands** | 13 |
-| **Test Coverage (global)** | 62.7% |
-| **Critical Packages Coverage** | 85-91% |
+## Implementation Summary
 
 ### Packages Implemented
 
-| Package | Purpose | Coverage |
-|---------|---------|----------|
-| `internal/lexer` | Tokenization of command input | 90.7% |
-| `internal/parser` | AST generation from tokens | 72.5% |
-| `internal/executor` | Command execution engine | 89.8% |
-| `internal/builtins` | Built-in command implementations | 50.9% |
-| `internal/completion` | Inline autocompletion | 91.2% |
-| `internal/history` | Command history management | 86.1% |
-| `internal/config` | YAML configuration loading | 63.4% |
-| `internal/terminal` | Terminal I/O and line editing | 47.3% |
-| `internal/shell` | Main REPL orchestration | 50.5% |
-| `internal/env` | Environment variable handling | 90.3% |
-| `internal/errors` | Custom error types | 100% |
+| Package | Purpose |
+|---------|---------|
+| `internal/lexer` | Tokenization of command input |
+| `internal/parser` | AST generation from tokens |
+| `internal/executor` | Command execution engine |
+| `internal/builtins` | Built-in command implementations |
+| `internal/completion` | Inline autocompletion |
+| `internal/history` | Command history management |
+| `internal/config` | YAML configuration loading |
+| `internal/terminal` | Terminal I/O and line editing |
+| `internal/shell` | Main REPL orchestration |
+| `internal/env` | Environment variable handling |
+| `internal/errors` | Custom error types |
 
 ### Built-in Commands
 
@@ -460,15 +450,32 @@ As a user, I want to access and search my command history so that I can quickly 
 | `help` | Show help | `--help` |
 | `clear` | Clear screen | `--help` |
 | `env` | Show/set environment variables | `--help` |
-| `goto` | Change directory | `--help` |
-| `here` | Print working directory | `--help` |
-| `list` | List directory contents | `-a`, `-l`, `-v`, `-q`, `--help` |
-| `makedir` | Create directories | `-p`, `-v`, `--help` |
-| `copy` | Copy files/directories | `-r`, `-f`, `-v`, `--help` |
-| `move` | Move/rename files | `-f`, `-v`, `--help` |
-| `remove` | Delete files/directories | `-r`, `-f`, `-y`, `-q`, `-v`, `--help` |
+| `cd` | Change directory | `--help` |
+| `pwd` | Print working directory | `--help` |
+| `ls` | List directory contents | `-a`, `-d`, `-l`, `-R`, `-v`, `-q`, `-s/--sort`, `--help` |
+| `mkdir` | Create directories | `-p`, `-v`, `--help` |
+| `cp` | Copy files/directories | `-r`, `-f`, `-v`, `--help` |
+| `mv` | Move/rename files | `-f`, `-v`, `--help` |
+| `rm` | Delete files/directories | `-r`, `-f`, `-y`, `-q`, `-v`, `--help` |
 | `reload` | Reload configuration | `--help` |
 | `history` | Show/clear command history | `-c`, `--help` |
+
+### ls Command Details
+
+The `ls` command supports extensive options:
+- `-a, --all` - Include hidden files (starting with .)
+- `-d, --directory` - List directories only
+- `-l, --long` - Long format (permissions, owner, group, size, date, name)
+- `-R, --recursive` - List subdirectories recursively
+- `-v, --verbose` - Verbose mode (implies -l, adds file type indicator)
+- `-q, --quiet` - Only show file names
+- `-s, --sort=<spec>` - Sort specification (name, size, time, dir; prefix with ! to reverse)
+
+Sort examples:
+- `--sort=name` - Sort by name (default)
+- `--sort=!time` - Sort by modification time, newest first
+- `--sort=dir,name` - Directories first, then by name
+- `--sort=!size,name` - By size descending, then by name
 
 ### Performance Results
 
@@ -479,32 +486,31 @@ As a user, I want to access and search my command history so that I can quickly 
 
 ### Platform Support
 
-| Platform | Architecture | Binary Size |
-|----------|--------------|-------------|
-| Linux | amd64 | 2.8 MB |
-| Linux | arm64 | 2.7 MB |
-| macOS | amd64 | 2.8 MB |
-| macOS | arm64 (Apple Silicon) | 2.8 MB |
-| Windows | amd64 | 3.1 MB |
+| Platform | Architecture |
+|----------|--------------|
+| Linux | amd64, arm64 |
+| macOS | amd64, arm64 (Apple Silicon) |
+| Windows | amd64 |
 
-### User Stories Completion
+### User Stories Status
 
-| Story | Priority | Status |
-|-------|----------|--------|
-| US1 - Execute Commands | P1 | ✅ Complete |
-| US2 - File System Navigation | P1 | ✅ Complete |
-| US3 - Inline Autocompletion | P2 | ✅ Complete |
-| US4 - Color Display | P2 | ✅ Complete |
-| US5 - Configuration Management | P2 | ✅ Complete |
-| US6 - Natural Language Commands | P2 | ✅ Complete |
-| US7 - Consistent Command Syntax | P3 | ✅ Complete |
-| US8 - Command Line Editing | P2 | ✅ Complete |
-| US9 - Command History | P3 | ✅ Complete |
+| Story | Status |
+|-------|--------|
+| US1 - Execute Commands | ✅ Complete |
+| US2 - File System Navigation | ✅ Complete |
+| US3 - Inline Autocompletion | ✅ Complete |
+| US4 - Color Display | ✅ Complete |
+| US5 - Configuration Management | ✅ Complete |
+| US6 - Standard Unix Commands | ✅ Complete |
+| US7 - Consistent Command Syntax | ✅ Complete |
+| US8 - Command Line Editing | ✅ Complete |
+| US9 - Command History | ✅ Complete |
 
-### Features Deferred to Future Phases
+### Potential Future Features (On-Demand)
 
+The following features may be implemented if requested:
 - Pipes and redirections (`|`, `>`, `<`, `>>`)
 - Shell scripting (conditionals, loops, functions)
 - Aliases
 - Job control (background processes, `&`, `fg`, `bg`)
-- Extended builtins (`cat`, `touch`, `find`, `grep`, `which`, `export`)
+- Additional builtins (`cat`, `touch`, `find`, `grep`, etc.)

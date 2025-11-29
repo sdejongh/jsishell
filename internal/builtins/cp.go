@@ -10,13 +10,13 @@ import (
 	"github.com/sdejongh/jsishell/internal/parser"
 )
 
-// CopyDefinition returns the copy command definition.
-func CopyDefinition() Definition {
+// CpDefinition returns the cp command definition.
+func CpDefinition() Definition {
 	return Definition{
-		Name:        "copy",
+		Name:        "cp",
 		Description: "Copy files and directories",
-		Usage:       "copy [options] source... destination",
-		Handler:     copyHandler,
+		Usage:       "cp [options] source... destination",
+		Handler:     cpHandler,
 		Options: []OptionDef{
 			{Long: "--recursive", Short: "-r", Description: "Copy directories recursively"},
 			{Long: "--verbose", Short: "-v", Description: "Print file names as they are copied"},
@@ -26,15 +26,15 @@ func CopyDefinition() Definition {
 	}
 }
 
-func copyHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int, error) {
+func cpHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int, error) {
 	// Check for --help
 	if cmd.HasFlag("--help") {
-		showCopyHelp(execCtx)
+		showCpHelp(execCtx)
 		return 0, nil
 	}
 
 	if len(cmd.Args) < 2 {
-		execCtx.WriteErrorln("copy: missing file operand")
+		execCtx.WriteErrorln("cp: missing file operand")
 		return 1, nil
 	}
 
@@ -52,7 +52,7 @@ func copyHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (in
 
 	// Multiple sources require directory destination
 	if len(sources) > 1 && !destIsDir {
-		execCtx.WriteErrorln("copy: target '%s' is not a directory", dest)
+		execCtx.WriteErrorln("cp: target '%s' is not a directory", dest)
 		return 1, nil
 	}
 
@@ -61,7 +61,7 @@ func copyHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (in
 	for _, src := range sources {
 		srcInfo, err := os.Stat(src)
 		if err != nil {
-			execCtx.WriteErrorln("copy: cannot stat '%s': %v", src, err)
+			execCtx.WriteErrorln("cp: cannot stat '%s': %v", src, err)
 			exitCode = 1
 			continue
 		}
@@ -75,17 +75,17 @@ func copyHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (in
 		// Check if source is a directory
 		if srcInfo.IsDir() {
 			if !recursive {
-				execCtx.WriteErrorln("copy: omitting directory '%s'", src)
+				execCtx.WriteErrorln("cp: omitting directory '%s'", src)
 				exitCode = 1
 				continue
 			}
-			if err := copyDir(src, actualDest, verbose, force, execCtx); err != nil {
-				execCtx.WriteErrorln("copy: error copying '%s': %v", src, err)
+			if err := cpDir(src, actualDest, verbose, force, execCtx); err != nil {
+				execCtx.WriteErrorln("cp: error copying '%s': %v", src, err)
 				exitCode = 1
 			}
 		} else {
-			if err := copyFile(src, actualDest, verbose, force, execCtx); err != nil {
-				execCtx.WriteErrorln("copy: error copying '%s': %v", src, err)
+			if err := cpFile(src, actualDest, verbose, force, execCtx); err != nil {
+				execCtx.WriteErrorln("cp: error copying '%s': %v", src, err)
 				exitCode = 1
 			}
 		}
@@ -94,11 +94,11 @@ func copyHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (in
 	return exitCode, nil
 }
 
-func copyFile(src, dest string, verbose, force bool, execCtx *Context) error {
+func cpFile(src, dest string, verbose, force bool, execCtx *Context) error {
 	// Check if destination exists
 	if _, err := os.Stat(dest); err == nil {
 		if !force {
-			execCtx.WriteErrorln("copy: '%s' already exists", dest)
+			execCtx.WriteErrorln("cp: '%s' already exists", dest)
 			return nil
 		}
 	}
@@ -131,7 +131,7 @@ func copyFile(src, dest string, verbose, force bool, execCtx *Context) error {
 	return nil
 }
 
-func copyDir(src, dest string, verbose, force bool, execCtx *Context) error {
+func cpDir(src, dest string, verbose, force bool, execCtx *Context) error {
 	srcInfo, err := os.Stat(src)
 	if err != nil {
 		return err
@@ -157,11 +157,11 @@ func copyDir(src, dest string, verbose, force bool, execCtx *Context) error {
 		destPath := filepath.Join(dest, entry.Name())
 
 		if entry.IsDir() {
-			if err := copyDir(srcPath, destPath, verbose, force, execCtx); err != nil {
+			if err := cpDir(srcPath, destPath, verbose, force, execCtx); err != nil {
 				return err
 			}
 		} else {
-			if err := copyFile(srcPath, destPath, verbose, force, execCtx); err != nil {
+			if err := cpFile(srcPath, destPath, verbose, force, execCtx); err != nil {
 				return err
 			}
 		}
@@ -170,10 +170,10 @@ func copyDir(src, dest string, verbose, force bool, execCtx *Context) error {
 	return nil
 }
 
-func showCopyHelp(execCtx *Context) {
-	help := `copy - Copy files and directories
+func showCpHelp(execCtx *Context) {
+	help := `cp - Copy files and directories
 
-Usage: copy [options] source... destination
+Usage: cp [options] source... destination
 
 Options:
   -r, --recursive   Copy directories recursively
@@ -182,10 +182,10 @@ Options:
       --help        Show this help message
 
 Examples:
-  copy file.txt backup.txt         Copy a file
-  copy file1.txt file2.txt dir/    Copy files to directory
-  copy -r source/ dest/            Copy directory recursively
-  copy -vf src.txt dst.txt         Copy with verbose, force overwrite
+  cp file.txt backup.txt         Copy a file
+  cp file1.txt file2.txt dir/    Copy files to directory
+  cp -r source/ dest/            Copy directory recursively
+  cp -vf src.txt dst.txt         Copy with verbose, force overwrite
 `
 	execCtx.Stdout.Write([]byte(help))
 }

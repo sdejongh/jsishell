@@ -1,12 +1,15 @@
 # Implementation Plan: Shell Interpreter
 
-**Branch**: `001-shell-interpreter` | **Date**: 2025-01-25 | **Completed**: 2025-11-27 | **Spec**: [spec.md](./spec.md)
-**Input**: Feature specification from `/specs/001-shell-interpreter/spec.md`
-**Status**: ✅ Complete (v1.0.0 Released)
+**Branch**: `master` | **Date**: 2025-01-25 | **Spec**: [spec.md](./spec.md)
+**Status**: Active Development (on-demand)
+
+## Development Approach
+
+This project follows an **on-demand development** approach. There is no fixed roadmap. Features and improvements are implemented as requested by the user.
 
 ## Summary
 
-Build a cross-platform interactive command line interpreter in Go with natural language command syntax, inline autocompletion, configurable behavior via YAML, and modern line editing capabilities. The MVP focuses on core shell operations (12 built-in commands), foreground execution only, with pipes/redirection/scripting deferred to future phases. The shell produces a single statically-linked executable with no external runtime dependencies.
+JSIShell is a cross-platform interactive command line interpreter in Go with standard Unix command syntax, inline autocompletion, configurable behavior via YAML, and modern line editing capabilities. The shell provides 14 built-in commands with extensive options (especially `ls`), foreground execution, and produces a single statically-linked executable with no external runtime dependencies.
 
 ## Technical Context
 
@@ -18,7 +21,7 @@ Build a cross-platform interactive command line interpreter in Go with natural l
 **Project Type**: Single CLI application
 **Performance Goals**: <100ms startup, <10ms input latency, <100ms autocompletion
 **Constraints**: No external runtime dependencies, <10MB binary size, minimal memory footprint
-**Scale/Scope**: Single-user interactive shell, 1000+ history entries, 12 built-in commands (MVP)
+**Scale/Scope**: Single-user interactive shell, 1000+ history entries, 14 built-in commands
 
 ## Constitution Check
 
@@ -75,18 +78,19 @@ internal/
 │   └── executor_test.go
 ├── builtins/            # Built-in commands
 │   ├── registry.go      # Command registry + Context type
-│   ├── goto.go          # goto command (cd equivalent)
-│   ├── here.go          # here command (pwd equivalent)
-│   ├── list.go          # list command with color support
-│   ├── copy.go          # copy command
-│   ├── move.go          # move command
-│   ├── remove.go        # remove command
-│   ├── makedir.go       # makedir command
+│   ├── cd.go            # cd command (change directory)
+│   ├── pwd.go           # pwd command (print working directory)
+│   ├── ls.go            # ls command with extensive options
+│   ├── cp.go            # cp command (copy)
+│   ├── mv.go            # mv command (move)
+│   ├── rm.go            # rm command (remove)
+│   ├── mkdir.go         # mkdir command
 │   ├── exit.go          # exit command
 │   ├── help.go          # help command
 │   ├── clear.go         # clear command
 │   ├── echo.go          # echo command
 │   ├── env_cmd.go       # env command
+│   ├── history.go       # history command
 │   ├── reload.go        # reload config command
 │   └── builtins_test.go
 ├── completion/          # Autocompletion engine

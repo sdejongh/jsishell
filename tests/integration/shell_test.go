@@ -53,8 +53,8 @@ func TestBasicCommandExecution(t *testing.T) {
 			wantCode: 0,
 		},
 		{
-			name:     "here command",
-			input:    "here",
+			name:     "pwd command",
+			input:    "pwd",
 			wantOut:  "", // Will output current directory
 			wantCode: 0,
 		},

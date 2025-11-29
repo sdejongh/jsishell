@@ -63,4 +63,45 @@ func TestRelativePathCompletion(t *testing.T) {
 			t.Errorf("CompletePath(\"i\") returned %d candidates, want 3", len(pathCandidates))
 		}
 	})
+
+	// Tests for path completion at start of line (no command yet)
+	t.Run("path at start of line with ./", func(t *testing.T) {
+		candidates := c.Complete("./int")
+		if len(candidates) != 1 {
+			t.Errorf("Complete(\"./int\") returned %d candidates, want 1", len(candidates))
+		} else if candidates[0].Text != "./internal/" {
+			t.Errorf("Complete(\"./int\") returned %q, want \"./internal/\"", candidates[0].Text)
+		}
+	})
+
+	t.Run("inline suggestion for path at start of line", func(t *testing.T) {
+		suggestion, has := c.InlineSuggestion("./int")
+		if !has || suggestion != "ernal/" {
+			t.Errorf("InlineSuggestion(\"./int\") = %q, %v; want \"ernal/\", true", suggestion, has)
+		}
+	})
+
+	t.Run("absolute path at start of line", func(t *testing.T) {
+		// Create a test file in tmpDir and use absolute path
+		absPath := filepath.Join(tmpDir, "int")
+		candidates := c.Complete(absPath)
+		if len(candidates) != 1 {
+			t.Errorf("Complete(%q) returned %d candidates, want 1", absPath, len(candidates))
+		}
+	})
+
+	t.Run("../path at start of line", func(t *testing.T) {
+		// Create subdirectory and test ../ completion
+		subDir := filepath.Join(tmpDir, "subdir")
+		os.MkdirAll(subDir, 0755)
+		os.Chdir(subDir)
+		defer os.Chdir(tmpDir)
+
+		candidates := c.Complete("../int")
+		if len(candidates) != 1 {
+			t.Errorf("Complete(\"../int\") returned %d candidates, want 1", len(candidates))
+		} else if candidates[0].Text != "../internal/" {
+			t.Errorf("Complete(\"../int\") returned %q, want \"../internal/\"", candidates[0].Text)
+		}
+	})
 }

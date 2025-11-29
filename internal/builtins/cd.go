@@ -9,23 +9,23 @@ import (
 	"github.com/sdejongh/jsishell/internal/parser"
 )
 
-// GotoDefinition returns the goto command definition.
-func GotoDefinition() Definition {
+// CdDefinition returns the cd command definition.
+func CdDefinition() Definition {
 	return Definition{
-		Name:        "goto",
+		Name:        "cd",
 		Description: "Change the current directory",
-		Usage:       "goto [directory]",
-		Handler:     gotoHandler,
+		Usage:       "cd [directory]",
+		Handler:     cdHandler,
 		Options: []OptionDef{
 			{Long: "--help", Description: "Show help message"},
 		},
 	}
 }
 
-func gotoHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int, error) {
+func cdHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int, error) {
 	// Check for --help
 	if cmd.HasFlag("--help") {
-		showGotoHelp(execCtx)
+		showCdHelp(execCtx)
 		return 0, nil
 	}
 
@@ -38,7 +38,7 @@ func gotoHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (in
 			home, _ = os.UserHomeDir()
 		}
 		if home == "" {
-			execCtx.WriteErrorln("goto: HOME not set")
+			execCtx.WriteErrorln("cd: HOME not set")
 			return 1, nil
 		}
 		targetDir = home
@@ -63,7 +63,7 @@ func gotoHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (in
 	if targetDir == "-" {
 		oldPwd := execCtx.Env.Get("OLDPWD")
 		if oldPwd == "" {
-			execCtx.WriteErrorln("goto: OLDPWD not set")
+			execCtx.WriteErrorln("cd: OLDPWD not set")
 			return 1, nil
 		}
 		targetDir = oldPwd
@@ -73,7 +73,7 @@ func gotoHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (in
 	// Convert to absolute path
 	absPath, err := filepath.Abs(targetDir)
 	if err != nil {
-		execCtx.WriteErrorln("goto: %s: %v", targetDir, err)
+		execCtx.WriteErrorln("cd: %s: %v", targetDir, err)
 		return 1, nil
 	}
 
@@ -81,15 +81,15 @@ func gotoHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (in
 	info, err := os.Stat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			execCtx.WriteErrorln("goto: %s: No such file or directory", targetDir)
+			execCtx.WriteErrorln("cd: %s: No such file or directory", targetDir)
 		} else {
-			execCtx.WriteErrorln("goto: %s: %v", targetDir, err)
+			execCtx.WriteErrorln("cd: %s: %v", targetDir, err)
 		}
 		return 1, nil
 	}
 
 	if !info.IsDir() {
-		execCtx.WriteErrorln("goto: %s: Not a directory", targetDir)
+		execCtx.WriteErrorln("cd: %s: Not a directory", targetDir)
 		return 1, nil
 	}
 
@@ -101,7 +101,7 @@ func gotoHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (in
 
 	// Change directory
 	if err := os.Chdir(absPath); err != nil {
-		execCtx.WriteErrorln("goto: %s: %v", targetDir, err)
+		execCtx.WriteErrorln("cd: %s: %v", targetDir, err)
 		return 1, nil
 	}
 
@@ -113,10 +113,10 @@ func gotoHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (in
 	return 0, nil
 }
 
-func showGotoHelp(execCtx *Context) {
-	help := `goto - Change the current directory
+func showCdHelp(execCtx *Context) {
+	help := `cd - Change the current directory
 
-Usage: goto [directory]
+Usage: cd [directory]
 
 Arguments:
   directory   Target directory (default: $HOME)
@@ -124,11 +124,11 @@ Arguments:
               Use - for previous directory
 
 Examples:
-  goto           Go to home directory
-  goto /tmp      Go to /tmp
-  goto ~         Go to home directory
-  goto ~/docs    Go to docs in home directory
-  goto -         Go to previous directory
+  cd           Go to home directory
+  cd /tmp      Go to /tmp
+  cd ~         Go to home directory
+  cd ~/docs    Go to docs in home directory
+  cd -         Go to previous directory
 `
 	execCtx.Stdout.Write([]byte(help))
 }

@@ -8,13 +8,13 @@ import (
 	"github.com/sdejongh/jsishell/internal/parser"
 )
 
-// RemoveDefinition returns the remove command definition.
-func RemoveDefinition() Definition {
+// RmDefinition returns the rm command definition.
+func RmDefinition() Definition {
 	return Definition{
-		Name:        "remove",
+		Name:        "rm",
 		Description: "Remove files and directories",
-		Usage:       "remove [options] file...",
-		Handler:     removeHandler,
+		Usage:       "rm [options] file...",
+		Handler:     rmHandler,
 		Options: []OptionDef{
 			{Long: "--recursive", Short: "-r", Description: "Remove directories and their contents recursively"},
 			{Long: "--force", Short: "-f", Description: "Ignore nonexistent files, never prompt"},
@@ -26,15 +26,15 @@ func RemoveDefinition() Definition {
 	}
 }
 
-func removeHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int, error) {
+func rmHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int, error) {
 	// Check for --help
 	if cmd.HasFlag("--help") {
-		showRemoveHelp(execCtx)
+		showRmHelp(execCtx)
 		return 0, nil
 	}
 
 	if len(cmd.Args) == 0 {
-		execCtx.WriteErrorln("remove: missing operand")
+		execCtx.WriteErrorln("rm: missing operand")
 		return 1, nil
 	}
 
@@ -50,13 +50,13 @@ func removeHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (
 		if err != nil {
 			if os.IsNotExist(err) {
 				if !force && !quiet {
-					execCtx.WriteErrorln("remove: cannot remove '%s': No such file or directory", path)
+					execCtx.WriteErrorln("rm: cannot remove '%s': No such file or directory", path)
 					exitCode = 1
 				}
 				continue
 			}
 			if !quiet {
-				execCtx.WriteErrorln("remove: cannot remove '%s': %v", path, err)
+				execCtx.WriteErrorln("rm: cannot remove '%s': %v", path, err)
 			}
 			exitCode = 1
 			continue
@@ -66,7 +66,7 @@ func removeHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (
 		if info.IsDir() {
 			if !recursive {
 				if !quiet {
-					execCtx.WriteErrorln("remove: cannot remove '%s': Is a directory", path)
+					execCtx.WriteErrorln("rm: cannot remove '%s': Is a directory", path)
 				}
 				exitCode = 1
 				continue
@@ -74,7 +74,7 @@ func removeHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (
 			// Recursive remove
 			if err := os.RemoveAll(path); err != nil {
 				if !quiet {
-					execCtx.WriteErrorln("remove: cannot remove '%s': %v", path, err)
+					execCtx.WriteErrorln("rm: cannot remove '%s': %v", path, err)
 				}
 				exitCode = 1
 				continue
@@ -83,7 +83,7 @@ func removeHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (
 			// Remove file
 			if err := os.Remove(path); err != nil {
 				if !quiet {
-					execCtx.WriteErrorln("remove: cannot remove '%s': %v", path, err)
+					execCtx.WriteErrorln("rm: cannot remove '%s': %v", path, err)
 				}
 				exitCode = 1
 				continue
@@ -98,10 +98,10 @@ func removeHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (
 	return exitCode, nil
 }
 
-func showRemoveHelp(execCtx *Context) {
-	help := `remove - Remove files and directories
+func showRmHelp(execCtx *Context) {
+	help := `rm - Remove files and directories
 
-Usage: remove [options] file...
+Usage: rm [options] file...
 
 Options:
   -r, --recursive   Remove directories and their contents recursively
@@ -112,11 +112,11 @@ Options:
       --help        Show this help message
 
 Examples:
-  remove file.txt            Remove a file
-  remove -r directory/       Remove directory recursively
-  remove -f nonexistent      No error for missing files
-  remove -rv dir1 dir2       Remove multiple directories verbosely
-  remove -q missing          Silently ignore missing files
+  rm file.txt            Remove a file
+  rm -r directory/       Remove directory recursively
+  rm -f nonexistent      No error for missing files
+  rm -rv dir1 dir2       Remove multiple directories verbosely
+  rm -q missing          Silently ignore missing files
 `
 	execCtx.Stdout.Write([]byte(help))
 }

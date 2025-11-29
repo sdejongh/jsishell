@@ -13,13 +13,13 @@ func RegisterAll(r *Registry) {
 	r.Register(EnvDefinition())
 
 	// File system commands
-	r.Register(GotoDefinition())
-	r.Register(HereDefinition())
-	r.Register(ListDefinition())
-	r.Register(MakedirDefinition())
-	r.Register(CopyDefinition())
-	r.Register(MoveDefinition())
-	r.Register(RemoveDefinition())
+	r.Register(CdDefinition())
+	r.Register(PwdDefinition())
+	r.Register(LsDefinition())
+	r.Register(MkdirDefinition())
+	r.Register(CpDefinition())
+	r.Register(MvDefinition())
+	r.Register(RmDefinition())
 
 	// Configuration commands
 	r.Register(ReloadDefinition())

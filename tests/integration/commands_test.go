@@ -55,9 +55,9 @@ func setupTestExecutor(t *testing.T, workDir string) (*executor.Executor, *bytes
 	return e, stdout, stderr
 }
 
-// TestGotoHere tests the goto (cd) and here (pwd) commands.
+// TestCdPwd tests the cd and pwd commands.
 // T040: Write integration test for cd/pwd
-func TestGotoHere(t *testing.T) {
+func TestCdPwd(t *testing.T) {
 	// Create a temporary directory for testing
 	tmpDir := t.TempDir()
 	subDir := filepath.Join(tmpDir, "subdir")
@@ -68,65 +68,65 @@ func TestGotoHere(t *testing.T) {
 	e, stdout, stderr := setupTestExecutor(t, tmpDir)
 	ctx := context.Background()
 
-	// Test 'here' command - should show current directory
-	code, err := e.ExecuteInput(ctx, "here")
+	// Test 'pwd' command - should show current directory
+	code, err := e.ExecuteInput(ctx, "pwd")
 	if err != nil {
-		t.Errorf("here error: %v", err)
+		t.Errorf("pwd error: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("here exit code = %d, want 0", code)
+		t.Errorf("pwd exit code = %d, want 0", code)
 	}
 	if !strings.Contains(stdout.String(), tmpDir) {
-		t.Errorf("here output = %q, want to contain %q", stdout.String(), tmpDir)
+		t.Errorf("pwd output = %q, want to contain %q", stdout.String(), tmpDir)
 	}
 
-	// Test 'goto' command to subdir
+	// Test 'cd' command to subdir
 	stdout.Reset()
 	stderr.Reset()
 
-	code, err = e.ExecuteInput(ctx, "goto subdir")
+	code, err = e.ExecuteInput(ctx, "cd subdir")
 	if err != nil {
-		t.Errorf("goto error: %v", err)
+		t.Errorf("cd error: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("goto exit code = %d, want 0", code)
+		t.Errorf("cd exit code = %d, want 0", code)
 	}
 
 	// Verify we're in subdir
 	stdout.Reset()
-	code, err = e.ExecuteInput(ctx, "here")
+	code, err = e.ExecuteInput(ctx, "pwd")
 	if err != nil {
-		t.Errorf("here error: %v", err)
+		t.Errorf("pwd error: %v", err)
 	}
 	if !strings.Contains(stdout.String(), "subdir") {
-		t.Errorf("after goto, here output = %q, want to contain 'subdir'", stdout.String())
+		t.Errorf("after cd, pwd output = %q, want to contain 'subdir'", stdout.String())
 	}
 
-	// Test 'goto' to parent directory
+	// Test 'cd' to parent directory
 	stdout.Reset()
 	stderr.Reset()
 
-	code, err = e.ExecuteInput(ctx, "goto ..")
+	code, err = e.ExecuteInput(ctx, "cd ..")
 	if err != nil {
-		t.Errorf("goto .. error: %v", err)
+		t.Errorf("cd .. error: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("goto .. exit code = %d, want 0", code)
+		t.Errorf("cd .. exit code = %d, want 0", code)
 	}
 
-	// Test 'goto' to non-existent directory
+	// Test 'cd' to non-existent directory
 	stdout.Reset()
 	stderr.Reset()
 
-	code, err = e.ExecuteInput(ctx, "goto nonexistent12345")
+	code, err = e.ExecuteInput(ctx, "cd nonexistent12345")
 	if code == 0 {
-		t.Error("goto to nonexistent dir should fail")
+		t.Error("cd to nonexistent dir should fail")
 	}
 }
 
-// TestListCommand tests the list command.
-// T041: Write integration test for list command
-func TestListCommand(t *testing.T) {
+// TestLsCommand tests the ls command.
+// T041: Write integration test for ls command
+func TestLsCommand(t *testing.T) {
 	// Create a temporary directory with test files
 	tmpDir := t.TempDir()
 
@@ -148,71 +148,71 @@ func TestListCommand(t *testing.T) {
 	e, stdout, stderr := setupTestExecutor(t, tmpDir)
 	ctx := context.Background()
 
-	// Test basic list
-	code, err := e.ExecuteInput(ctx, "list")
+	// Test basic ls
+	code, err := e.ExecuteInput(ctx, "ls")
 	if err != nil {
-		t.Errorf("list error: %v", err)
+		t.Errorf("ls error: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("list exit code = %d, want 0", code)
+		t.Errorf("ls exit code = %d, want 0", code)
 	}
 
 	output := stdout.String()
 	// Should show visible files
 	if !strings.Contains(output, "file1.txt") {
-		t.Errorf("list output should contain file1.txt, got: %s", output)
+		t.Errorf("ls output should contain file1.txt, got: %s", output)
 	}
 	if !strings.Contains(output, "subdir") {
-		t.Errorf("list output should contain subdir, got: %s", output)
+		t.Errorf("ls output should contain subdir, got: %s", output)
 	}
 	// Should NOT show hidden files by default
 	if strings.Contains(output, ".hidden") {
-		t.Errorf("list output should not contain .hidden by default, got: %s", output)
+		t.Errorf("ls output should not contain .hidden by default, got: %s", output)
 	}
 
-	// Test list with --all flag
+	// Test ls with --all flag
 	stdout.Reset()
 	stderr.Reset()
 
-	code, err = e.ExecuteInput(ctx, "list --all")
+	code, err = e.ExecuteInput(ctx, "ls --all")
 	if err != nil {
-		t.Errorf("list --all error: %v", err)
+		t.Errorf("ls --all error: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("list --all exit code = %d, want 0", code)
+		t.Errorf("ls --all exit code = %d, want 0", code)
 	}
 
 	output = stdout.String()
 	// Should show hidden files
 	if !strings.Contains(output, ".hidden") {
-		t.Errorf("list --all output should contain .hidden, got: %s", output)
+		t.Errorf("ls --all output should contain .hidden, got: %s", output)
 	}
 
-	// Test list specific directory
+	// Test ls specific directory
 	stdout.Reset()
 	stderr.Reset()
 
-	code, err = e.ExecuteInput(ctx, "list "+tmpDir)
+	code, err = e.ExecuteInput(ctx, "ls "+tmpDir)
 	if err != nil {
-		t.Errorf("list <dir> error: %v", err)
+		t.Errorf("ls <dir> error: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("list <dir> exit code = %d, want 0", code)
+		t.Errorf("ls <dir> exit code = %d, want 0", code)
 	}
 
-	// Test list non-existent directory
+	// Test ls non-existent directory
 	stdout.Reset()
 	stderr.Reset()
 
-	code, err = e.ExecuteInput(ctx, "list /nonexistent12345")
+	code, err = e.ExecuteInput(ctx, "ls /nonexistent12345")
 	if code == 0 {
-		t.Error("list nonexistent dir should fail")
+		t.Error("ls nonexistent dir should fail")
 	}
 }
 
-// TestCopyMoveRemove tests copy, move, and remove commands.
-// T042: Write integration test for copy/move/remove
-func TestCopyMoveRemove(t *testing.T) {
+// TestCpMvRm tests cp, mv, and rm commands.
+// T042: Write integration test for cp/mv/rm
+func TestCpMvRm(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a test file
@@ -224,75 +224,75 @@ func TestCopyMoveRemove(t *testing.T) {
 	e, stdout, stderr := setupTestExecutor(t, tmpDir)
 	ctx := context.Background()
 
-	// Test copy command
+	// Test cp command
 	dstFile := filepath.Join(tmpDir, "destination.txt")
-	code, err := e.ExecuteInput(ctx, "copy source.txt destination.txt")
+	code, err := e.ExecuteInput(ctx, "cp source.txt destination.txt")
 	if err != nil {
-		t.Errorf("copy error: %v", err)
+		t.Errorf("cp error: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("copy exit code = %d, want 0; stderr: %s", code, stderr.String())
+		t.Errorf("cp exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 
-	// Verify copy succeeded
+	// Verify cp succeeded
 	if _, err := os.Stat(dstFile); os.IsNotExist(err) {
-		t.Error("copy failed: destination file does not exist")
+		t.Error("cp failed: destination file does not exist")
 	}
 	if _, err := os.Stat(srcFile); os.IsNotExist(err) {
-		t.Error("copy should not remove source file")
+		t.Error("cp should not remove source file")
 	}
 
-	// Test move command
+	// Test mv command
 	stdout.Reset()
 	stderr.Reset()
 
 	movedFile := filepath.Join(tmpDir, "moved.txt")
-	code, err = e.ExecuteInput(ctx, "move destination.txt moved.txt")
+	code, err = e.ExecuteInput(ctx, "mv destination.txt moved.txt")
 	if err != nil {
-		t.Errorf("move error: %v", err)
+		t.Errorf("mv error: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("move exit code = %d, want 0; stderr: %s", code, stderr.String())
+		t.Errorf("mv exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 
-	// Verify move succeeded
+	// Verify mv succeeded
 	if _, err := os.Stat(movedFile); os.IsNotExist(err) {
-		t.Error("move failed: destination file does not exist")
+		t.Error("mv failed: destination file does not exist")
 	}
 	if _, err := os.Stat(dstFile); !os.IsNotExist(err) {
-		t.Error("move should remove source file")
+		t.Error("mv should remove source file")
 	}
 
-	// Test remove command
+	// Test rm command
 	stdout.Reset()
 	stderr.Reset()
 
-	code, err = e.ExecuteInput(ctx, "remove moved.txt")
+	code, err = e.ExecuteInput(ctx, "rm moved.txt")
 	if err != nil {
-		t.Errorf("remove error: %v", err)
+		t.Errorf("rm error: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("remove exit code = %d, want 0; stderr: %s", code, stderr.String())
+		t.Errorf("rm exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 
-	// Verify remove succeeded
+	// Verify rm succeeded
 	if _, err := os.Stat(movedFile); !os.IsNotExist(err) {
-		t.Error("remove failed: file still exists")
+		t.Error("rm failed: file still exists")
 	}
 
-	// Test remove non-existent file
+	// Test rm non-existent file
 	stdout.Reset()
 	stderr.Reset()
 
-	code, err = e.ExecuteInput(ctx, "remove nonexistent12345.txt")
+	code, err = e.ExecuteInput(ctx, "rm nonexistent12345.txt")
 	if code == 0 {
-		t.Error("remove nonexistent file should fail")
+		t.Error("rm nonexistent file should fail")
 	}
 }
 
-// TestMakedir tests the makedir (mkdir) command.
+// TestMkdir tests the mkdir command.
 // T043: Write integration test for mkdir
-func TestMakedir(t *testing.T) {
+func TestMkdir(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	e, stdout, stderr := setupTestExecutor(t, tmpDir)
@@ -300,21 +300,21 @@ func TestMakedir(t *testing.T) {
 
 	// Test creating a simple directory
 	newDir := filepath.Join(tmpDir, "newdir")
-	code, err := e.ExecuteInput(ctx, "makedir newdir")
+	code, err := e.ExecuteInput(ctx, "mkdir newdir")
 	if err != nil {
-		t.Errorf("makedir error: %v", err)
+		t.Errorf("mkdir error: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("makedir exit code = %d, want 0; stderr: %s", code, stderr.String())
+		t.Errorf("mkdir exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 
 	// Verify directory was created
 	info, err := os.Stat(newDir)
 	if os.IsNotExist(err) {
-		t.Error("makedir failed: directory does not exist")
+		t.Error("mkdir failed: directory does not exist")
 	}
 	if !info.IsDir() {
-		t.Error("makedir created a file instead of a directory")
+		t.Error("mkdir created a file instead of a directory")
 	}
 
 	// Test creating nested directories with --parents
@@ -322,34 +322,34 @@ func TestMakedir(t *testing.T) {
 	stderr.Reset()
 
 	nestedDir := filepath.Join(tmpDir, "a", "b", "c")
-	code, err = e.ExecuteInput(ctx, "makedir --parents a/b/c")
+	code, err = e.ExecuteInput(ctx, "mkdir --parents a/b/c")
 	if err != nil {
-		t.Errorf("makedir --parents error: %v", err)
+		t.Errorf("mkdir --parents error: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("makedir --parents exit code = %d, want 0; stderr: %s", code, stderr.String())
+		t.Errorf("mkdir --parents exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 
 	// Verify nested directory was created
 	info, err = os.Stat(nestedDir)
 	if os.IsNotExist(err) {
-		t.Error("makedir --parents failed: nested directory does not exist")
+		t.Error("mkdir --parents failed: nested directory does not exist")
 	}
 	if !info.IsDir() {
-		t.Error("makedir --parents created a file instead of a directory")
+		t.Error("mkdir --parents created a file instead of a directory")
 	}
 
 	// Test creating existing directory (should fail without --parents)
 	stdout.Reset()
 	stderr.Reset()
 
-	code, err = e.ExecuteInput(ctx, "makedir newdir")
+	code, err = e.ExecuteInput(ctx, "mkdir newdir")
 	if code == 0 {
-		t.Error("makedir on existing dir should fail")
+		t.Error("mkdir on existing dir should fail")
 	}
 }
 
-// TestRecursiveOperations tests recursive copy and remove.
+// TestRecursiveOperations tests recursive cp and rm.
 func TestRecursiveOperations(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -368,39 +368,39 @@ func TestRecursiveOperations(t *testing.T) {
 	e, stdout, stderr := setupTestExecutor(t, tmpDir)
 	ctx := context.Background()
 
-	// Test recursive copy
+	// Test recursive cp
 	dstDir := filepath.Join(tmpDir, "dest_dir")
-	code, err := e.ExecuteInput(ctx, "copy --recursive source_dir dest_dir")
+	code, err := e.ExecuteInput(ctx, "cp --recursive source_dir dest_dir")
 	if err != nil {
-		t.Errorf("copy --recursive error: %v", err)
+		t.Errorf("cp --recursive error: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("copy --recursive exit code = %d, want 0; stderr: %s", code, stderr.String())
+		t.Errorf("cp --recursive exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 
-	// Verify recursive copy
+	// Verify recursive cp
 	if _, err := os.Stat(filepath.Join(dstDir, "file.txt")); os.IsNotExist(err) {
-		t.Error("recursive copy failed: file.txt not copied")
+		t.Error("recursive cp failed: file.txt not copied")
 	}
 	if _, err := os.Stat(filepath.Join(dstDir, "subdir", "nested.txt")); os.IsNotExist(err) {
-		t.Error("recursive copy failed: nested file not copied")
+		t.Error("recursive cp failed: nested file not copied")
 	}
 
-	// Test recursive remove
+	// Test recursive rm
 	stdout.Reset()
 	stderr.Reset()
 
-	code, err = e.ExecuteInput(ctx, "remove --recursive dest_dir")
+	code, err = e.ExecuteInput(ctx, "rm --recursive dest_dir")
 	if err != nil {
-		t.Errorf("remove --recursive error: %v", err)
+		t.Errorf("rm --recursive error: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("remove --recursive exit code = %d, want 0; stderr: %s", code, stderr.String())
+		t.Errorf("rm --recursive exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 
-	// Verify recursive remove
+	// Verify recursive rm
 	if _, err := os.Stat(dstDir); !os.IsNotExist(err) {
-		t.Error("recursive remove failed: directory still exists")
+		t.Error("recursive rm failed: directory still exists")
 	}
 }
 
@@ -418,29 +418,29 @@ func TestAbsoluteAndRelativePaths(t *testing.T) {
 	ctx := context.Background()
 
 	// Test with relative path
-	code, err := e.ExecuteInput(ctx, "list testfile.txt")
+	code, err := e.ExecuteInput(ctx, "ls testfile.txt")
 	if err != nil {
-		t.Errorf("list relative path error: %v", err)
+		t.Errorf("ls relative path error: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("list relative path exit code = %d, want 0; stderr: %s", code, stderr.String())
+		t.Errorf("ls relative path exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 
 	// Test with absolute path
 	stdout.Reset()
 	stderr.Reset()
 
-	code, err = e.ExecuteInput(ctx, "list "+testFile)
+	code, err = e.ExecuteInput(ctx, "ls "+testFile)
 	if err != nil {
-		t.Errorf("list absolute path error: %v", err)
+		t.Errorf("ls absolute path error: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("list absolute path exit code = %d, want 0; stderr: %s", code, stderr.String())
+		t.Errorf("ls absolute path exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 }
 
-// TestListLongFormat tests the list --long option.
-func TestListLongFormat(t *testing.T) {
+// TestLsLongFormat tests the ls --long option.
+func TestLsLongFormat(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a test file
@@ -451,24 +451,24 @@ func TestListLongFormat(t *testing.T) {
 	e, stdout, _ := setupTestExecutor(t, tmpDir)
 	ctx := context.Background()
 
-	// Test list with --long flag
-	code, err := e.ExecuteInput(ctx, "list --long")
+	// Test ls with --long flag
+	code, err := e.ExecuteInput(ctx, "ls --long")
 	if err != nil {
-		t.Errorf("list --long error: %v", err)
+		t.Errorf("ls --long error: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("list --long exit code = %d, want 0", code)
+		t.Errorf("ls --long exit code = %d, want 0", code)
 	}
 
 	output := stdout.String()
 	// Long format should include permissions or size info
 	if !strings.Contains(output, "testfile.txt") {
-		t.Errorf("list --long output should contain testfile.txt, got: %s", output)
+		t.Errorf("ls --long output should contain testfile.txt, got: %s", output)
 	}
 }
 
-// TestListVerboseFormat tests the list --verbose option.
-func TestListVerboseFormat(t *testing.T) {
+// TestLsVerboseFormat tests the ls --verbose option.
+func TestLsVerboseFormat(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a test file
@@ -479,23 +479,23 @@ func TestListVerboseFormat(t *testing.T) {
 	e, stdout, _ := setupTestExecutor(t, tmpDir)
 	ctx := context.Background()
 
-	code, err := e.ExecuteInput(ctx, "list --verbose")
+	code, err := e.ExecuteInput(ctx, "ls --verbose")
 	if err != nil {
-		t.Errorf("list --verbose error: %v", err)
+		t.Errorf("ls --verbose error: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("list --verbose exit code = %d, want 0", code)
+		t.Errorf("ls --verbose exit code = %d, want 0", code)
 	}
 
 	output := stdout.String()
 	// Verbose format should include file type indicator
 	if !strings.Contains(output, "[file]") {
-		t.Errorf("list --verbose output should contain [file], got: %s", output)
+		t.Errorf("ls --verbose output should contain [file], got: %s", output)
 	}
 }
 
-// TestListQuietMode tests the list --quiet option.
-func TestListQuietMode(t *testing.T) {
+// TestLsQuietMode tests the ls --quiet option.
+func TestLsQuietMode(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create test files
@@ -506,56 +506,56 @@ func TestListQuietMode(t *testing.T) {
 	e, stdout, _ := setupTestExecutor(t, tmpDir)
 	ctx := context.Background()
 
-	code, err := e.ExecuteInput(ctx, "list --quiet")
+	code, err := e.ExecuteInput(ctx, "ls --quiet")
 	if err != nil {
-		t.Errorf("list --quiet error: %v", err)
+		t.Errorf("ls --quiet error: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("list --quiet exit code = %d, want 0", code)
+		t.Errorf("ls --quiet exit code = %d, want 0", code)
 	}
 
 	output := stdout.String()
 	// Quiet mode should only show file names
 	if output != "file.txt\n" {
-		t.Errorf("list --quiet output = %q, want %q", output, "file.txt\n")
+		t.Errorf("ls --quiet output = %q, want %q", output, "file.txt\n")
 	}
 }
 
-// TestRemoveYesFlag tests the remove --yes flag.
-func TestRemoveYesFlag(t *testing.T) {
+// TestRmYesFlag tests the rm --yes flag.
+func TestRmYesFlag(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	e, _, stderr := setupTestExecutor(t, tmpDir)
 	ctx := context.Background()
 
 	// Test that --yes suppresses error for missing file (like --force)
-	code, _ := e.ExecuteInput(ctx, "remove --yes nonexistent.txt")
+	code, _ := e.ExecuteInput(ctx, "rm --yes nonexistent.txt")
 
 	if code != 0 {
-		t.Errorf("remove --yes should return 0 for missing file, got %d", code)
+		t.Errorf("rm --yes should return 0 for missing file, got %d", code)
 	}
 	if stderr.Len() > 0 {
-		t.Errorf("remove --yes should not produce error output, got: %s", stderr.String())
+		t.Errorf("rm --yes should not produce error output, got: %s", stderr.String())
 	}
 }
 
-// TestRemoveQuietFlag tests the remove --quiet flag.
-func TestRemoveQuietFlag(t *testing.T) {
+// TestRmQuietFlag tests the rm --quiet flag.
+func TestRmQuietFlag(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	e, stdout, stderr := setupTestExecutor(t, tmpDir)
 	ctx := context.Background()
 
 	// Test that --quiet suppresses error messages
-	code, _ := e.ExecuteInput(ctx, "remove --quiet nonexistent.txt")
+	code, _ := e.ExecuteInput(ctx, "rm --quiet nonexistent.txt")
 
 	// Exit code may be non-zero, but no error output
 	_ = code
 	if stderr.Len() > 0 {
-		t.Errorf("remove --quiet should suppress errors, got stderr: %s", stderr.String())
+		t.Errorf("rm --quiet should suppress errors, got stderr: %s", stderr.String())
 	}
 	if stdout.Len() > 0 {
-		t.Errorf("remove --quiet should produce no stdout, got: %s", stdout.String())
+		t.Errorf("rm --quiet should produce no stdout, got: %s", stdout.String())
 	}
 }
 
@@ -565,7 +565,7 @@ func TestHelpFlag(t *testing.T) {
 	e, stdout, _ := setupTestExecutor(t, tmpDir)
 	ctx := context.Background()
 
-	commands := []string{"list", "copy", "move", "remove", "makedir", "goto", "here", "echo"}
+	commands := []string{"ls", "cp", "mv", "rm", "mkdir", "cd", "pwd", "echo"}
 
 	for _, cmd := range commands {
 		t.Run(cmd, func(t *testing.T) {

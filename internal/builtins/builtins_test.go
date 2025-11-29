@@ -625,7 +625,7 @@ func TestRegisterAll(t *testing.T) {
 
 	expectedCommands := []string{
 		"echo", "exit", "help", "clear", "env",
-		"goto", "here", "list", "makedir", "copy", "move", "remove",
+		"cd", "pwd", "ls", "mkdir", "cp", "mv", "rm",
 		"reload", "history",
 	}
 
@@ -644,7 +644,7 @@ func TestAllBuiltinsHaveHelp(t *testing.T) {
 	// Commands that should have --help (all except 'help' itself)
 	commandsWithHelp := []string{
 		"echo", "exit", "clear", "env",
-		"goto", "here", "list", "makedir", "copy", "move", "remove",
+		"cd", "pwd", "ls", "mkdir", "cp", "mv", "rm",
 		"reload", "history",
 	}
 
@@ -684,13 +684,13 @@ func TestHelpFlagProducesOutput(t *testing.T) {
 		{"exit", exitHandler},
 		{"clear", clearHandler},
 		{"env", envHandler},
-		{"goto", gotoHandler},
-		{"here", hereHandler},
-		{"list", listHandler},
-		{"makedir", makedirHandler},
-		{"copy", copyHandler},
-		{"move", moveHandler},
-		{"remove", removeHandler},
+		{"cd", cdHandler},
+		{"pwd", pwdHandler},
+		{"ls", lsHandler},
+		{"mkdir", mkdirHandler},
+		{"cp", cpHandler},
+		{"mv", mvHandler},
+		{"rm", rmHandler},
 		{"reload", reloadHandler},
 		{"history", historyHandler},
 	}
@@ -1084,8 +1084,8 @@ func TestHistoryCommandEmptyHistory(t *testing.T) {
 // T115: Tests for --verbose and --quiet flags
 // ============================================================================
 
-// TestListVerboseOption tests list --verbose option.
-func TestListVerboseOption(t *testing.T) {
+// TestLsVerboseOption tests ls --verbose option.
+func TestLsVerboseOption(t *testing.T) {
 	// Create a temp directory with files
 	tmpDir := t.TempDir()
 
@@ -1099,12 +1099,12 @@ func TestListVerboseOption(t *testing.T) {
 	execCtx.WorkDir = tmpDir
 
 	cmd := &parser.Command{
-		Name:  "list",
+		Name:  "ls",
 		Args:  []string{tmpDir},
 		Flags: map[string]bool{"--verbose": true},
 	}
 
-	code, err := listHandler(context.Background(), cmd, execCtx)
+	code, err := lsHandler(context.Background(), cmd, execCtx)
 
 	if code != 0 {
 		t.Errorf("exit code = %d, want 0", code)
@@ -1120,8 +1120,8 @@ func TestListVerboseOption(t *testing.T) {
 	}
 }
 
-// TestListQuietOption tests list --quiet option.
-func TestListQuietOption(t *testing.T) {
+// TestLsQuietOption tests ls --quiet option.
+func TestLsQuietOption(t *testing.T) {
 	// Create a temp directory with files
 	tmpDir := t.TempDir()
 
@@ -1135,12 +1135,12 @@ func TestListQuietOption(t *testing.T) {
 	execCtx.WorkDir = tmpDir
 
 	cmd := &parser.Command{
-		Name:  "list",
+		Name:  "ls",
 		Args:  []string{tmpDir},
 		Flags: map[string]bool{"--quiet": true},
 	}
 
-	code, err := listHandler(context.Background(), cmd, execCtx)
+	code, err := lsHandler(context.Background(), cmd, execCtx)
 
 	if code != 0 {
 		t.Errorf("exit code = %d, want 0", code)
@@ -1157,17 +1157,17 @@ func TestListQuietOption(t *testing.T) {
 	}
 }
 
-// TestRemoveQuietOption tests remove --quiet option.
-func TestRemoveQuietOption(t *testing.T) {
+// TestRmQuietOption tests rm --quiet option.
+func TestRmQuietOption(t *testing.T) {
 	execCtx, stdout, stderr := createTestContext()
 
 	cmd := &parser.Command{
-		Name:  "remove",
+		Name:  "rm",
 		Args:  []string{"/nonexistent/path/file.txt"},
 		Flags: map[string]bool{"--quiet": true},
 	}
 
-	code, err := removeHandler(context.Background(), cmd, execCtx)
+	code, err := rmHandler(context.Background(), cmd, execCtx)
 
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -1186,18 +1186,18 @@ func TestRemoveQuietOption(t *testing.T) {
 	}
 }
 
-// TestRemoveYesAlias tests that --yes/-y works as alias for --force.
-func TestRemoveYesAlias(t *testing.T) {
+// TestRmYesAlias tests that --yes/-y works as alias for --force.
+func TestRmYesAlias(t *testing.T) {
 	execCtx, _, stderr := createTestContext()
 
 	// Test with --yes flag
 	cmd := &parser.Command{
-		Name:  "remove",
+		Name:  "rm",
 		Args:  []string{"/nonexistent/path/file.txt"},
 		Flags: map[string]bool{"--yes": true},
 	}
 
-	code, err := removeHandler(context.Background(), cmd, execCtx)
+	code, err := rmHandler(context.Background(), cmd, execCtx)
 
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -1213,12 +1213,12 @@ func TestRemoveYesAlias(t *testing.T) {
 	// Test with -y short flag
 	execCtx2, _, stderr2 := createTestContext()
 	cmd2 := &parser.Command{
-		Name:  "remove",
+		Name:  "rm",
 		Args:  []string{"/another/nonexistent/file.txt"},
 		Flags: map[string]bool{"-y": true},
 	}
 
-	code2, err2 := removeHandler(context.Background(), cmd2, execCtx2)
+	code2, err2 := rmHandler(context.Background(), cmd2, execCtx2)
 
 	if err2 != nil {
 		t.Errorf("unexpected error: %v", err2)

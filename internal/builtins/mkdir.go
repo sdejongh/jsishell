@@ -8,13 +8,13 @@ import (
 	"github.com/sdejongh/jsishell/internal/parser"
 )
 
-// MakedirDefinition returns the makedir command definition.
-func MakedirDefinition() Definition {
+// MkdirDefinition returns the mkdir command definition.
+func MkdirDefinition() Definition {
 	return Definition{
-		Name:        "makedir",
+		Name:        "mkdir",
 		Description: "Create directories",
-		Usage:       "makedir [options] directory...",
-		Handler:     makedirHandler,
+		Usage:       "mkdir [options] directory...",
+		Handler:     mkdirHandler,
 		Options: []OptionDef{
 			{Long: "--parents", Short: "-p", Description: "Create parent directories as needed"},
 			{Long: "--verbose", Short: "-v", Description: "Print a message for each created directory"},
@@ -23,15 +23,15 @@ func MakedirDefinition() Definition {
 	}
 }
 
-func makedirHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int, error) {
+func mkdirHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int, error) {
 	// Check for --help
 	if cmd.HasFlag("--help") {
-		showMakedirHelp(execCtx)
+		showMkdirHelp(execCtx)
 		return 0, nil
 	}
 
 	if len(cmd.Args) == 0 {
-		execCtx.WriteErrorln("makedir: missing operand")
+		execCtx.WriteErrorln("mkdir: missing operand")
 		return 1, nil
 	}
 
@@ -53,20 +53,20 @@ func makedirHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) 
 				// With -p, existing directories are OK
 				continue
 			}
-			execCtx.WriteErrorln("makedir: cannot create directory '%s': %v", dir, err)
+			execCtx.WriteErrorln("mkdir: cannot create directory '%s': %v", dir, err)
 			exitCode = 1
 		} else if verbose {
-			fmt.Fprintf(execCtx.Stdout, "makedir: created directory '%s'\n", dir)
+			fmt.Fprintf(execCtx.Stdout, "mkdir: created directory '%s'\n", dir)
 		}
 	}
 
 	return exitCode, nil
 }
 
-func showMakedirHelp(execCtx *Context) {
-	help := `makedir - Create directories
+func showMkdirHelp(execCtx *Context) {
+	help := `mkdir - Create directories
 
-Usage: makedir [options] directory...
+Usage: mkdir [options] directory...
 
 Options:
   -p, --parents   Create parent directories as needed
@@ -74,9 +74,9 @@ Options:
       --help      Show this help message
 
 Examples:
-  makedir docs           Create 'docs' directory
-  makedir -p a/b/c       Create nested directories
-  makedir -v new_folder  Create with verbose output
+  mkdir docs           Create 'docs' directory
+  mkdir -p a/b/c       Create nested directories
+  mkdir -v new_folder  Create with verbose output
 `
 	execCtx.Stdout.Write([]byte(help))
 }

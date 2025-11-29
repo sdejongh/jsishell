@@ -8,23 +8,23 @@ import (
 	"github.com/sdejongh/jsishell/internal/parser"
 )
 
-// HereDefinition returns the here command definition.
-func HereDefinition() Definition {
+// PwdDefinition returns the pwd command definition.
+func PwdDefinition() Definition {
 	return Definition{
-		Name:        "here",
+		Name:        "pwd",
 		Description: "Print the current working directory",
-		Usage:       "here",
-		Handler:     hereHandler,
+		Usage:       "pwd",
+		Handler:     pwdHandler,
 		Options: []OptionDef{
 			{Long: "--help", Description: "Show help message"},
 		},
 	}
 }
 
-func hereHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int, error) {
+func pwdHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int, error) {
 	// Check for --help
 	if cmd.HasFlag("--help") {
-		showHereHelp(execCtx)
+		showPwdHelp(execCtx)
 		return 0, nil
 	}
 
@@ -34,7 +34,7 @@ func hereHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (in
 		var err error
 		pwd, err = os.Getwd()
 		if err != nil {
-			execCtx.WriteErrorln("here: %v", err)
+			execCtx.WriteErrorln("pwd: %v", err)
 			return 1, nil
 		}
 	}
@@ -43,16 +43,16 @@ func hereHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (in
 	return 0, nil
 }
 
-func showHereHelp(execCtx *Context) {
-	help := `here - Print the current working directory
+func showPwdHelp(execCtx *Context) {
+	help := `pwd - Print the current working directory
 
-Usage: here
+Usage: pwd
 
 Description:
   Prints the absolute path of the current working directory.
 
 Examples:
-  here    Print current directory
+  pwd    Print current directory
 `
 	execCtx.Stdout.Write([]byte(help))
 }

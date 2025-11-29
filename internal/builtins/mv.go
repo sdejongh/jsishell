@@ -9,13 +9,13 @@ import (
 	"github.com/sdejongh/jsishell/internal/parser"
 )
 
-// MoveDefinition returns the move command definition.
-func MoveDefinition() Definition {
+// MvDefinition returns the mv command definition.
+func MvDefinition() Definition {
 	return Definition{
-		Name:        "move",
+		Name:        "mv",
 		Description: "Move or rename files and directories",
-		Usage:       "move [options] source... destination",
-		Handler:     moveHandler,
+		Usage:       "mv [options] source... destination",
+		Handler:     mvHandler,
 		Options: []OptionDef{
 			{Long: "--verbose", Short: "-v", Description: "Print file names as they are moved"},
 			{Long: "--force", Short: "-f", Description: "Overwrite existing files without prompting"},
@@ -24,15 +24,15 @@ func MoveDefinition() Definition {
 	}
 }
 
-func moveHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int, error) {
+func mvHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int, error) {
 	// Check for --help
 	if cmd.HasFlag("--help") {
-		showMoveHelp(execCtx)
+		showMvHelp(execCtx)
 		return 0, nil
 	}
 
 	if len(cmd.Args) < 2 {
-		execCtx.WriteErrorln("move: missing file operand")
+		execCtx.WriteErrorln("mv: missing file operand")
 		return 1, nil
 	}
 
@@ -49,7 +49,7 @@ func moveHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (in
 
 	// Multiple sources require directory destination
 	if len(sources) > 1 && !destIsDir {
-		execCtx.WriteErrorln("move: target '%s' is not a directory", dest)
+		execCtx.WriteErrorln("mv: target '%s' is not a directory", dest)
 		return 1, nil
 	}
 
@@ -58,7 +58,7 @@ func moveHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (in
 	for _, src := range sources {
 		// Check if source exists
 		if _, err := os.Stat(src); err != nil {
-			execCtx.WriteErrorln("move: cannot stat '%s': %v", src, err)
+			execCtx.WriteErrorln("mv: cannot stat '%s': %v", src, err)
 			exitCode = 1
 			continue
 		}
@@ -72,13 +72,13 @@ func moveHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (in
 		// Check if destination exists
 		if _, err := os.Stat(actualDest); err == nil {
 			if !force {
-				execCtx.WriteErrorln("move: '%s' already exists", actualDest)
+				execCtx.WriteErrorln("mv: '%s' already exists", actualDest)
 				exitCode = 1
 				continue
 			}
 			// Force: remove destination first
 			if err := os.RemoveAll(actualDest); err != nil {
-				execCtx.WriteErrorln("move: cannot remove '%s': %v", actualDest, err)
+				execCtx.WriteErrorln("mv: cannot remove '%s': %v", actualDest, err)
 				exitCode = 1
 				continue
 			}
@@ -86,7 +86,7 @@ func moveHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (in
 
 		// Perform the move
 		if err := os.Rename(src, actualDest); err != nil {
-			execCtx.WriteErrorln("move: cannot move '%s' to '%s': %v", src, actualDest, err)
+			execCtx.WriteErrorln("mv: cannot move '%s' to '%s': %v", src, actualDest, err)
 			exitCode = 1
 			continue
 		}
@@ -99,10 +99,10 @@ func moveHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (in
 	return exitCode, nil
 }
 
-func showMoveHelp(execCtx *Context) {
-	help := `move - Move or rename files and directories
+func showMvHelp(execCtx *Context) {
+	help := `mv - Move or rename files and directories
 
-Usage: move [options] source... destination
+Usage: mv [options] source... destination
 
 Options:
   -v, --verbose   Print file names as they are moved
@@ -110,10 +110,10 @@ Options:
       --help      Show this help message
 
 Examples:
-  move file.txt newname.txt        Rename a file
-  move file1.txt file2.txt dir/    Move files to directory
-  move dir1 dir2                   Rename a directory
-  move -vf src.txt dst.txt         Move with verbose, force overwrite
+  mv file.txt newname.txt        Rename a file
+  mv file1.txt file2.txt dir/    Move files to directory
+  mv dir1 dir2                   Rename a directory
+  mv -vf src.txt dst.txt         Move with verbose, force overwrite
 `
 	execCtx.Stdout.Write([]byte(help))
 }

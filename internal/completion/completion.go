@@ -285,8 +285,12 @@ func (c *Completer) CompleteOption(commandName, optionPrefix string) []Completio
 func (c *Completer) Complete(input string) []CompletionCandidate {
 	input = strings.TrimLeft(input, " \t")
 
-	// If input has no space, complete as command
+	// If input has no space, it could be a command or a path
 	if !strings.Contains(input, " ") {
+		// If it looks like a path (starts with /, ./, ../, or ~), complete as path
+		if isPathLike(input) {
+			return c.CompletePath(input)
+		}
 		return c.CompleteCommand(input)
 	}
 
@@ -332,7 +336,8 @@ func (c *Completer) InlineSuggestion(input string) (string, bool) {
 	trimmedInput := strings.TrimLeft(input, " \t")
 
 	// Determine if we're completing a command or a path
-	isPathCompletion := strings.Contains(trimmedInput, " ")
+	// Path completion happens when there's a space (argument) or when input looks like a path
+	isPathCompletion := strings.Contains(trimmedInput, " ") || isPathLike(trimmedInput)
 
 	candidates := c.Complete(input)
 	if len(candidates) == 0 {
@@ -341,11 +346,14 @@ func (c *Completer) InlineSuggestion(input string) (string, bool) {
 
 	// For path completion, we need to compare against the last word only
 	compareWith := trimmedInput
-	if isPathCompletion {
+	if strings.Contains(trimmedInput, " ") {
 		lastSpaceIdx := strings.LastIndex(input, " ")
 		if lastSpaceIdx >= 0 {
 			compareWith = input[lastSpaceIdx+1:]
 		}
+	} else if isPathCompletion {
+		// Path at start of line - compareWith is already the full trimmedInput
+		compareWith = trimmedInput
 	}
 
 	// If only one candidate, return the completion suffix
@@ -421,4 +429,18 @@ func commonPrefix(a, b string) string {
 		}
 	}
 	return a[:minLen]
+}
+
+// isPathLike returns true if the input looks like a path rather than a command name.
+// This includes absolute paths (/...), relative paths (./..., ../...), and home paths (~...).
+func isPathLike(input string) bool {
+	if input == "" {
+		return false
+	}
+	return strings.HasPrefix(input, "/") ||
+		strings.HasPrefix(input, "./") ||
+		strings.HasPrefix(input, "../") ||
+		input == "." ||
+		input == ".." ||
+		strings.HasPrefix(input, "~")
 }
