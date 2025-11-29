@@ -307,3 +307,98 @@ tests/
    - Typing `vi` suggests `vim`, `view`, etc.
    - Typing `pyt` suggests `python`, `python3`, etc.
    - Builtins like `cd` are not shadowed by PATH executables
+
+### v1.3.0 Features
+
+#### search Command
+
+1. **Purpose**: Find files and directories matching glob patterns.
+
+2. **Implementation**: `internal/builtins/search.go`
+   ```go
+   func SearchDefinition() Definition {
+       return Definition{
+           Name:        "search",
+           Description: "Search for files and directories",
+           Usage:       "search <directory> <pattern>... [options]",
+           Handler:     searchHandler,
+           Options: []OptionDef{
+               {Long: "--recursive", Short: "-r", Description: "Search recursively"},
+               {Long: "--level", Short: "-l", HasValue: true, Description: "Max depth (0=unlimited)"},
+               {Long: "--help", Description: "Show help message"},
+           },
+       }
+   }
+   ```
+
+3. **Arguments**:
+   - First argument: directory to search in (required)
+   - Remaining arguments: glob patterns to match (at least one required)
+
+4. **Options**:
+   - `-r, --recursive`: Search subdirectories recursively
+   - `-l, --level=<n>`: Maximum depth level (0 = unlimited, default)
+   - `--help`: Show help message
+
+5. **Behavior**:
+   - Non-recursive by default (only searches specified directory)
+   - Supports multiple patterns (OR logic)
+   - Uses `filepath.Match()` for glob matching
+   - Colorized output based on file type (directory, executable, file)
+   - Depth level controls how deep to recurse (0 = no limit)
+
+6. **Simple Examples** (backward compatible):
+   ```
+   search . "*.go"                    # Find Go files in current dir
+   search /home "*.txt"               # Find text files in /home
+   search . "*.go" "*.md" -r          # Find Go and Markdown recursively (implicit OR)
+   search . "test_*" -r               # Find files starting with test_
+   search . "*.log" -r --level=2      # Find logs up to 2 levels deep
+   ```
+
+#### search Logical Expressions (v1.3.0)
+
+1. **Logical Operators**: Full boolean expression support with:
+   - `AND`, `&&` - Both patterns must match
+   - `OR`, `||` - Either pattern must match
+   - `XOR`, `^` - Exactly one pattern must match
+   - `NOT`, `!` - Negate the following pattern
+   - `( )` - Group expressions
+
+2. **Operator Precedence** (highest to lowest):
+   - NOT (unary)
+   - AND
+   - XOR
+   - OR
+
+3. **Implementation** (`internal/builtins/searchexpr.go`):
+   - `SearchExpr` interface with `Evaluate(filename) bool` method
+   - AST nodes: `PatternExpr`, `AndExpr`, `OrExpr`, `XorExpr`, `NotExpr`
+   - Recursive descent parser for expression parsing
+   - Tokenizer handles patterns, operators, and parentheses
+
+4. **Parser Architecture**:
+   ```go
+   // Grammar (recursive descent):
+   // expr     = orExpr
+   // orExpr   = xorExpr (("OR" | "||") xorExpr)*
+   // xorExpr  = andExpr (("XOR" | "^") andExpr)*
+   // andExpr  = unaryExpr (("AND" | "&&") unaryExpr)*
+   // unaryExpr = ("NOT" | "!") unaryExpr | primary
+   // primary  = pattern | "(" expr ")"
+   ```
+
+5. **Backward Compatibility**:
+   - Multiple patterns without operators use implicit OR
+   - Single pattern works exactly as before
+   - Operators only activated when detected in arguments
+
+6. **Logical Expression Examples**:
+   ```
+   search . "*.go" AND NOT "*_test.go" -r     # Go files excluding tests
+   search . "test_*" AND "*.py" -r            # Python test files
+   search . "*.go" XOR "*.mod" -r             # .go OR .mod but not both
+   search . NOT "*.log" -r                    # All files except .log
+   search . "(" "*.go" OR "*.md" ")" AND NOT "*_test*" -r
+       # Go or Markdown files, excluding test files
+   ```

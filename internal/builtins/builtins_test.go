@@ -625,7 +625,7 @@ func TestRegisterAll(t *testing.T) {
 
 	expectedCommands := []string{
 		"echo", "exit", "help", "clear", "env",
-		"cd", "pwd", "ls", "mkdir", "cp", "mv", "rm",
+		"cd", "pwd", "ls", "mkdir", "cp", "mv", "rm", "search",
 		"reload", "history",
 	}
 
@@ -644,7 +644,7 @@ func TestAllBuiltinsHaveHelp(t *testing.T) {
 	// Commands that should have --help (all except 'help' itself)
 	commandsWithHelp := []string{
 		"echo", "exit", "clear", "env",
-		"cd", "pwd", "ls", "mkdir", "cp", "mv", "rm",
+		"cd", "pwd", "ls", "mkdir", "cp", "mv", "rm", "search",
 		"reload", "history",
 	}
 
@@ -691,6 +691,7 @@ func TestHelpFlagProducesOutput(t *testing.T) {
 		{"cp", cpHandler},
 		{"mv", mvHandler},
 		{"rm", rmHandler},
+		{"search", searchHandler},
 		{"reload", reloadHandler},
 		{"history", historyHandler},
 	}
@@ -1228,5 +1229,316 @@ func TestRmYesAlias(t *testing.T) {
 	}
 	if code2 != 0 {
 		t.Errorf("exit code = %d, want 0 with -y for missing file", code2)
+	}
+}
+
+// ============================================================================
+// Search Command Tests
+// ============================================================================
+
+// TestSearchBasic tests basic search functionality.
+func TestSearchBasic(t *testing.T) {
+	// Create temp directory structure
+	tmpDir := t.TempDir()
+	os.WriteFile(tmpDir+"/file1.txt", []byte("content1"), 0644)
+	os.WriteFile(tmpDir+"/file2.txt", []byte("content2"), 0644)
+	os.WriteFile(tmpDir+"/other.log", []byte("log content"), 0644)
+
+	execCtx, stdout, _ := createTestContext()
+
+	cmd := &parser.Command{
+		Name:  "search",
+		Args:  []string{tmpDir, "*.txt"},
+		Flags: make(map[string]bool),
+	}
+
+	code, err := searchHandler(context.Background(), cmd, execCtx)
+
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	output := stdout.String()
+	if !bytes.Contains([]byte(output), []byte("file1.txt")) {
+		t.Errorf("output should contain 'file1.txt', got: %s", output)
+	}
+	if !bytes.Contains([]byte(output), []byte("file2.txt")) {
+		t.Errorf("output should contain 'file2.txt', got: %s", output)
+	}
+	if bytes.Contains([]byte(output), []byte("other.log")) {
+		t.Errorf("output should NOT contain 'other.log', got: %s", output)
+	}
+}
+
+// TestSearchMultiplePatterns tests search with multiple patterns.
+func TestSearchMultiplePatterns(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(tmpDir+"/file.txt", []byte("txt"), 0644)
+	os.WriteFile(tmpDir+"/file.log", []byte("log"), 0644)
+	os.WriteFile(tmpDir+"/file.md", []byte("md"), 0644)
+
+	execCtx, stdout, _ := createTestContext()
+
+	cmd := &parser.Command{
+		Name:  "search",
+		Args:  []string{tmpDir, "*.txt", "*.log"},
+		Flags: make(map[string]bool),
+	}
+
+	code, err := searchHandler(context.Background(), cmd, execCtx)
+
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	output := stdout.String()
+	if !bytes.Contains([]byte(output), []byte("file.txt")) {
+		t.Errorf("output should contain 'file.txt', got: %s", output)
+	}
+	if !bytes.Contains([]byte(output), []byte("file.log")) {
+		t.Errorf("output should contain 'file.log', got: %s", output)
+	}
+	if bytes.Contains([]byte(output), []byte("file.md")) {
+		t.Errorf("output should NOT contain 'file.md', got: %s", output)
+	}
+}
+
+// TestSearchRecursive tests recursive search.
+func TestSearchRecursive(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(tmpDir+"/top.txt", []byte("top"), 0644)
+	os.MkdirAll(tmpDir+"/subdir", 0755)
+	os.WriteFile(tmpDir+"/subdir/nested.txt", []byte("nested"), 0644)
+
+	// Test without recursive
+	execCtx1, stdout1, _ := createTestContext()
+	cmd1 := &parser.Command{
+		Name:  "search",
+		Args:  []string{tmpDir, "*.txt"},
+		Flags: make(map[string]bool),
+	}
+
+	code1, _ := searchHandler(context.Background(), cmd1, execCtx1)
+	if code1 != 0 {
+		t.Errorf("exit code = %d, want 0", code1)
+	}
+
+	output1 := stdout1.String()
+	if !bytes.Contains([]byte(output1), []byte("top.txt")) {
+		t.Errorf("non-recursive should find 'top.txt', got: %s", output1)
+	}
+	if bytes.Contains([]byte(output1), []byte("nested.txt")) {
+		t.Errorf("non-recursive should NOT find 'nested.txt', got: %s", output1)
+	}
+
+	// Test with recursive
+	execCtx2, stdout2, _ := createTestContext()
+	cmd2 := &parser.Command{
+		Name:  "search",
+		Args:  []string{tmpDir, "*.txt"},
+		Flags: map[string]bool{"-r": true},
+	}
+
+	code2, _ := searchHandler(context.Background(), cmd2, execCtx2)
+	if code2 != 0 {
+		t.Errorf("exit code = %d, want 0", code2)
+	}
+
+	output2 := stdout2.String()
+	if !bytes.Contains([]byte(output2), []byte("top.txt")) {
+		t.Errorf("recursive should find 'top.txt', got: %s", output2)
+	}
+	if !bytes.Contains([]byte(output2), []byte("nested.txt")) {
+		t.Errorf("recursive should find 'nested.txt', got: %s", output2)
+	}
+}
+
+// TestSearchLevel tests depth level limiting.
+func TestSearchLevel(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(tmpDir+"/level0.txt", []byte("l0"), 0644)
+	os.MkdirAll(tmpDir+"/l1", 0755)
+	os.WriteFile(tmpDir+"/l1/level1.txt", []byte("l1"), 0644)
+	os.MkdirAll(tmpDir+"/l1/l2", 0755)
+	os.WriteFile(tmpDir+"/l1/l2/level2.txt", []byte("l2"), 0644)
+
+	execCtx, stdout, _ := createTestContext()
+	cmd := &parser.Command{
+		Name:    "search",
+		Args:    []string{tmpDir, "*.txt"},
+		Flags:   map[string]bool{"-r": true},
+		Options: map[string]string{"--level": "1"},
+	}
+
+	code, _ := searchHandler(context.Background(), cmd, execCtx)
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+
+	output := stdout.String()
+	if !bytes.Contains([]byte(output), []byte("level0.txt")) {
+		t.Errorf("level=1 should find 'level0.txt', got: %s", output)
+	}
+	if !bytes.Contains([]byte(output), []byte("level1.txt")) {
+		t.Errorf("level=1 should find 'level1.txt', got: %s", output)
+	}
+	if bytes.Contains([]byte(output), []byte("level2.txt")) {
+		t.Errorf("level=1 should NOT find 'level2.txt', got: %s", output)
+	}
+}
+
+// TestSearchMissingArgs tests error handling for missing arguments.
+func TestSearchMissingArgs(t *testing.T) {
+	execCtx, _, stderr := createTestContext()
+
+	// No arguments
+	cmd := &parser.Command{
+		Name:  "search",
+		Args:  []string{},
+		Flags: make(map[string]bool),
+	}
+
+	code, _ := searchHandler(context.Background(), cmd, execCtx)
+
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1 for missing args", code)
+	}
+	if !bytes.Contains(stderr.Bytes(), []byte("missing arguments")) {
+		t.Errorf("stderr should contain 'missing arguments', got: %s", stderr.String())
+	}
+}
+
+// TestSearchNonExistentDirectory tests error for non-existent directory.
+func TestSearchNonExistentDirectory(t *testing.T) {
+	execCtx, _, stderr := createTestContext()
+
+	cmd := &parser.Command{
+		Name:  "search",
+		Args:  []string{"/nonexistent/path", "*.txt"},
+		Flags: make(map[string]bool),
+	}
+
+	code, _ := searchHandler(context.Background(), cmd, execCtx)
+
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1 for non-existent directory", code)
+	}
+	if !bytes.Contains(stderr.Bytes(), []byte("no such directory")) {
+		t.Errorf("stderr should contain 'no such directory', got: %s", stderr.String())
+	}
+}
+
+// TestSearchNotADirectory tests error when path is not a directory.
+func TestSearchNotADirectory(t *testing.T) {
+	tmpFile := t.TempDir() + "/file.txt"
+	os.WriteFile(tmpFile, []byte("content"), 0644)
+
+	execCtx, _, stderr := createTestContext()
+
+	cmd := &parser.Command{
+		Name:  "search",
+		Args:  []string{tmpFile, "*.txt"},
+		Flags: make(map[string]bool),
+	}
+
+	code, _ := searchHandler(context.Background(), cmd, execCtx)
+
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1 for file instead of directory", code)
+	}
+	if !bytes.Contains(stderr.Bytes(), []byte("not a directory")) {
+		t.Errorf("stderr should contain 'not a directory', got: %s", stderr.String())
+	}
+}
+
+// TestSearchHelp tests the help flag.
+func TestSearchHelp(t *testing.T) {
+	execCtx, stdout, _ := createTestContext()
+
+	cmd := &parser.Command{
+		Name:  "search",
+		Args:  []string{},
+		Flags: map[string]bool{"--help": true},
+	}
+
+	code, err := searchHandler(context.Background(), cmd, execCtx)
+
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	output := stdout.String()
+	if !bytes.Contains([]byte(output), []byte("Usage:")) {
+		t.Errorf("help output should contain 'Usage:', got: %s", output)
+	}
+	if !bytes.Contains([]byte(output), []byte("--recursive")) {
+		t.Errorf("help output should contain '--recursive', got: %s", output)
+	}
+	if !bytes.Contains([]byte(output), []byte("--level")) {
+		t.Errorf("help output should contain '--level', got: %s", output)
+	}
+}
+
+// TestSearchInvalidLevel tests error for invalid level value.
+func TestSearchInvalidLevel(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	execCtx, _, stderr := createTestContext()
+	cmd := &parser.Command{
+		Name:    "search",
+		Args:    []string{tmpDir, "*.txt"},
+		Flags:   map[string]bool{"-r": true},
+		Options: map[string]string{"--level": "invalid"},
+	}
+
+	code, _ := searchHandler(context.Background(), cmd, execCtx)
+
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1 for invalid level", code)
+	}
+	if !bytes.Contains(stderr.Bytes(), []byte("invalid level")) {
+		t.Errorf("stderr should contain 'invalid level', got: %s", stderr.String())
+	}
+}
+
+// TestSearchDirectories tests searching for directories.
+func TestSearchDirectories(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.MkdirAll(tmpDir+"/testdir", 0755)
+	os.MkdirAll(tmpDir+"/otherdir", 0755)
+	os.WriteFile(tmpDir+"/testfile.txt", []byte("content"), 0644)
+
+	execCtx, stdout, _ := createTestContext()
+
+	cmd := &parser.Command{
+		Name:  "search",
+		Args:  []string{tmpDir, "test*"},
+		Flags: make(map[string]bool),
+	}
+
+	code, _ := searchHandler(context.Background(), cmd, execCtx)
+
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+
+	output := stdout.String()
+	if !bytes.Contains([]byte(output), []byte("testdir")) {
+		t.Errorf("output should contain 'testdir', got: %s", output)
+	}
+	if !bytes.Contains([]byte(output), []byte("testfile.txt")) {
+		t.Errorf("output should contain 'testfile.txt', got: %s", output)
+	}
+	if bytes.Contains([]byte(output), []byte("otherdir")) {
+		t.Errorf("output should NOT contain 'otherdir', got: %s", output)
 	}
 }

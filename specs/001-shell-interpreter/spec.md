@@ -301,7 +301,7 @@ As a user, I want to access and search my command history so that I can quickly 
 
 #### Built-in Commands (Phased)
 
-- **FR-043**: System provides these built-in commands: `cd`, `pwd`, `ls`, `cp`, `mv`, `rm`, `mkdir`, `exit`, `help`, `clear`, `echo`, `env`, `reload`, `history`
+- **FR-043**: System provides these built-in commands: `cd`, `pwd`, `ls`, `cp`, `mv`, `rm`, `mkdir`, `search`, `exit`, `help`, `clear`, `echo`, `env`, `reload`, `history`, `init`
 - **FR-044**: Additional commands may be added on-demand as requested
 
 #### Job Control (Phased)
@@ -465,6 +465,51 @@ As a user, I want to access and search my command history so that I can quickly 
   - Builtins like `cd`, `ls` are never shadowed by PATH executables
   - Results sorted alphabetically, builtins listed first
 
+### Session 2025-11-29 (v1.3.0 Features)
+
+#### search Command with Logical Expressions
+
+- Q: How to search for files by pattern? → A: `search` builtin command with full expression support:
+  - First argument is the directory to search in
+  - Following arguments form a logical expression with patterns and operators
+  - `-r, --recursive` for recursive search
+  - `-l, --level=<n>` to limit search depth (0 = unlimited)
+
+- Q: How does pattern matching work? → A:
+  - Uses `filepath.Match()` for glob pattern matching
+  - Standard glob syntax: `*`, `?`, `[abc]`, `[a-z]`
+  - Patterns matched against base filename only
+
+- Q: What logical operators are supported? → A:
+  - `AND`, `&&` - Both patterns must match
+  - `OR`, `||` - Either pattern must match (default for multiple patterns without operators)
+  - `XOR`, `^` - Exactly one pattern must match (exclusive OR)
+  - `NOT`, `!` - Negate the following pattern
+  - `( )` - Group expressions for complex logic
+
+- Q: What is the operator precedence? → A: (highest to lowest)
+  1. NOT (unary, binds tightest)
+  2. AND
+  3. XOR
+  4. OR (binds loosest)
+
+- Q: How is the expression parser implemented? → A:
+  - Recursive descent parser in `searchexpr.go`
+  - Tokenizer handles: patterns, operators (AND/OR/XOR/NOT), parentheses
+  - AST nodes: PatternExpr, AndExpr, OrExpr, XorExpr, NotExpr
+  - Each node implements `SearchExpr` interface with `Evaluate(filename) bool`
+
+- Q: What about depth limiting? → A:
+  - `--level=0` or no level option means unlimited depth
+  - `--level=1` searches only immediate subdirectories
+  - `--level=2` searches up to 2 levels deep, etc.
+  - Only effective when combined with `-r`
+
+- Q: Is the command backward compatible? → A: Yes
+  - Multiple patterns without operators use implicit OR (e.g., `"*.go" "*.md"`)
+  - Single pattern works as before
+  - Operators only activated when explicit operators are detected
+
 ## Assumptions
 
 - Users have basic familiarity with command-line interfaces
@@ -513,6 +558,7 @@ As a user, I want to access and search my command history so that I can quickly 
 | `init` | Generate default config | `--help` |
 | `reload` | Reload configuration | `--help` |
 | `history` | Show/clear command history | `-c`, `--help` |
+| `search` | Search for files and directories | `-r`, `-l/--level`, `--help` |
 
 ### ls Command Details
 
@@ -538,6 +584,34 @@ The `--exclude` option uses standard glob patterns and can be repeated:
 - `ls -e=*.log` - List files excluding .log files
 - `cp -r -e=*.tmp -e=*.bak src/ dest/` - Copy excluding .tmp and .bak files
 - `rm -r --exclude=*.txt dir/` - Remove directory keeping .txt files
+
+### search Command Details
+
+The `search` command finds files and directories matching glob patterns with full logical expression support:
+- First argument: directory to search in (required)
+- Following arguments: expression with patterns and optional logical operators
+- `-r, --recursive` - Search subdirectories recursively
+- `-l, --level=<n>` - Maximum depth level (0 = unlimited, default)
+
+**Logical Operators** (case-insensitive):
+- `AND`, `&&` - Both patterns must match
+- `OR`, `||` - Either pattern must match (default for multiple patterns)
+- `XOR`, `^` - Exactly one pattern must match
+- `NOT`, `!` - Negate the following pattern
+- `( )` - Group expressions
+
+**Operator Precedence** (highest to lowest): NOT > AND > XOR > OR
+
+Simple examples (backward compatible):
+- `search . "*.go"` - Find Go files in current directory
+- `search . "*.go" "*.md" -r` - Find Go OR Markdown files (implicit OR)
+
+Logical expression examples:
+- `search . "*.go" AND NOT "*_test.go" -r` - Find Go files excluding tests
+- `search . "test_*" AND "*.py" -r` - Find Python test files
+- `search . "*.go" XOR "*.mod" -r` - Find .go OR .mod but not both
+- `search . NOT "*.log" -r` - Find all files except .log files
+- `search . "(" "*.go" OR "*.md" ")" AND NOT "*_test*" -r` - Complex expression
 
 ### Performance Results
 

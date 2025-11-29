@@ -20,6 +20,7 @@ func RegisterAll(r *Registry) {
 	r.Register(CpDefinition())
 	r.Register(MvDefinition())
 	r.Register(RmDefinition())
+	r.Register(SearchDefinition())
 
 	// Configuration commands
 	r.Register(ReloadDefinition())
