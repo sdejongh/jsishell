@@ -207,15 +207,6 @@ type exprLexer struct {
 	current int
 }
 
-func newExprLexer(args []string) *exprLexer {
-	// Convert to ExprArg without quoting info for backward compatibility
-	exprArgs := make([]ExprArg, len(args))
-	for i, arg := range args {
-		exprArgs[i] = ExprArg{Value: arg, Quoted: false}
-	}
-	return newExprLexerWithQuoting(exprArgs)
-}
-
 func newExprLexerWithQuoting(args []ExprArg) *exprLexer {
 	return &exprLexer{
 		args:    args,
@@ -463,23 +454,6 @@ func (p *exprParser) parsePrimary() (SearchExpr, error) {
 	default:
 		return nil, fmt.Errorf("unexpected token: %s", tok.value)
 	}
-}
-
-// hasOperatorsOrPredicates checks if arguments contain operators or type predicates.
-func hasOperatorsOrPredicates(args []string) bool {
-	for _, arg := range args {
-		upper := strings.ToUpper(arg)
-		if upper == "AND" || upper == "OR" || upper == "XOR" || upper == "NOT" ||
-			upper == "&&" || upper == "||" || upper == "^" || upper == "!" ||
-			strings.Contains(arg, "(") || strings.Contains(arg, ")") {
-			return true
-		}
-		// Check for type predicates
-		if _, ok := isTypePredicate(arg); ok {
-			return true
-		}
-	}
-	return false
 }
 
 // hasOperatorsOrPredicatesWithQuoting checks if non-quoted arguments contain operators or type predicates.

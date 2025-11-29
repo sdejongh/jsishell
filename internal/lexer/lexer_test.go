@@ -421,10 +421,10 @@ func TestLexerBackslashInWord(t *testing.T) {
 		input   string
 		literal string
 	}{
-		{`path\\file`, `path\\file`},          // Double backslash preserved
-		{`a\tb`, `a\tb`},                      // \t preserved (not tab)
-		{`C:\Users\test`, `C:\Users\test`},    // Windows path preserved
-		{`d:\pictures\`, `d:\pictures\`},      // Windows path with trailing backslash
+		{`path\\file`, `path\\file`},       // Double backslash preserved
+		{`a\tb`, `a\tb`},                   // \t preserved (not tab)
+		{`C:\Users\test`, `C:\Users\test`}, // Windows path preserved
+		{`d:\pictures\`, `d:\pictures\`},   // Windows path with trailing backslash
 	}
 
 	for _, tt := range tests {

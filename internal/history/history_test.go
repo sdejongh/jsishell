@@ -185,7 +185,7 @@ func TestHistoryNavigateWithCurrentLine(t *testing.T) {
 	}
 
 	// Go down - should get back to current line
-	cmd, ok = h.Next()
+	_, ok = h.Next()
 	if ok {
 		t.Errorf("Next() should return false when at current line position")
 	}

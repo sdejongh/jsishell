@@ -74,7 +74,7 @@ func TestTerminalWrite(t *testing.T) {
 	}
 
 	// Test WriteError
-	n, err = term.WriteError([]byte("error"))
+	_, err = term.WriteError([]byte("error"))
 	if err != nil {
 		t.Errorf("WriteError error: %v", err)
 	}

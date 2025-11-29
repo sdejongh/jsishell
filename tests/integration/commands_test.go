@@ -94,7 +94,7 @@ func TestCdPwd(t *testing.T) {
 
 	// Verify we're in subdir
 	stdout.Reset()
-	code, err = e.ExecuteInput(ctx, "pwd")
+	_, err = e.ExecuteInput(ctx, "pwd")
 	if err != nil {
 		t.Errorf("pwd error: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestCdPwd(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 
-	code, err = e.ExecuteInput(ctx, "cd nonexistent12345")
+	code, _ = e.ExecuteInput(ctx, "cd nonexistent12345")
 	if code == 0 {
 		t.Error("cd to nonexistent dir should fail")
 	}
@@ -204,7 +204,7 @@ func TestLsCommand(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 
-	code, err = e.ExecuteInput(ctx, "ls /nonexistent12345")
+	code, _ = e.ExecuteInput(ctx, "ls /nonexistent12345")
 	if code == 0 {
 		t.Error("ls nonexistent dir should fail")
 	}
@@ -284,7 +284,7 @@ func TestCpMvRm(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 
-	code, err = e.ExecuteInput(ctx, "rm nonexistent12345.txt")
+	code, _ = e.ExecuteInput(ctx, "rm nonexistent12345.txt")
 	if code == 0 {
 		t.Error("rm nonexistent file should fail")
 	}
@@ -343,7 +343,7 @@ func TestMkdir(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 
-	code, err = e.ExecuteInput(ctx, "mkdir newdir")
+	code, _ = e.ExecuteInput(ctx, "mkdir newdir")
 	if code == 0 {
 		t.Error("mkdir on existing dir should fail")
 	}

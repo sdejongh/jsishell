@@ -101,14 +101,6 @@ func (cs *ColorScheme) Colorize(text, color string) string {
 	return code + text + ResetCode
 }
 
-// getColor returns the configured color or a default.
-func (cs *ColorScheme) getColor(configColor, defaultColor string) string {
-	if configColor != "" {
-		return configColor
-	}
-	return defaultColor
-}
-
 // Directory colorizes a directory name.
 func (cs *ColorScheme) Directory(text string) string {
 	color := "blue"

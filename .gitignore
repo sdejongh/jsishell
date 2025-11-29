@@ -1,7 +1,6 @@
-# Binaries
-jsishell
-jsishell-linux
-jsishell-darwin
+# Binaries (only in root directory)
+/jsishell
+/jsishell-*
 jsishell.exe
 *.exe
 *.exe~
@@ -42,3 +41,10 @@ build/
 # Local configuration (user-specific)
 *.local.yaml
 *.local.yml
+
+# Claude Code / AI assistant files
+.claude/
+CLAUDE.md
+
+# Specify workflow files
+.specify/

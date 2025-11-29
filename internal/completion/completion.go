@@ -547,7 +547,7 @@ func commonPrefix(a, b string) string {
 	}
 
 	for i := 0; i < minLen; i++ {
-		if strings.ToLower(string(a[i])) != strings.ToLower(string(b[i])) {
+		if !strings.EqualFold(string(a[i]), string(b[i])) {
 			return a[:i]
 		}
 	}

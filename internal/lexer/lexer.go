@@ -309,4 +309,3 @@ func isOptionChar(ch rune) bool {
 func isWordTerminator(ch rune) bool {
 	return unicode.IsSpace(ch) || ch == '"' || ch == '\'' || ch == '$' || ch == '='
 }
-
