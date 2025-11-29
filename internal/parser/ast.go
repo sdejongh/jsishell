@@ -1,11 +1,18 @@
 // Package parser parses lexer tokens into a command AST.
 package parser
 
+// Arg represents a command argument with quoting information.
+type Arg struct {
+	Value  string // The argument value
+	Quoted bool   // True if the argument was quoted (single or double quotes)
+}
+
 // Command represents a parsed shell command.
 type Command struct {
 	Name         string              // Command name (may be abbreviated)
 	Resolved     string              // Resolved full command name (set by executor)
-	Args         []string            // Positional arguments
+	Args         []string            // Positional arguments (for backward compatibility)
+	ArgsWithInfo []Arg               // Positional arguments with quoting information
 	Options      map[string]string   // Named options (--key=value or --key value)
 	MultiOptions map[string][]string // Options that can be specified multiple times
 	Flags        map[string]bool     // Boolean flags (--verbose, -v)
@@ -16,6 +23,7 @@ type Command struct {
 func NewCommand() *Command {
 	return &Command{
 		Args:         make([]string, 0),
+		ArgsWithInfo: make([]Arg, 0),
 		Options:      make(map[string]string),
 		MultiOptions: make(map[string][]string),
 		Flags:        make(map[string]bool),

@@ -510,6 +510,70 @@ As a user, I want to access and search my command history so that I can quickly 
   - Single pattern works as before
   - Operators only activated when explicit operators are detected
 
+### Session 2025-11-29 (v1.4.0 Features)
+
+#### Glob Expansion in Parser
+
+- Q: How to handle wildcards like `ls *.go`? → A:
+  - Parser now expands glob patterns in unquoted arguments
+  - Uses `filepath.Glob()` for pattern matching
+  - If no files match, original pattern is preserved (bash behavior)
+  - Quoted arguments (`"*.go"`) are never expanded
+
+#### Windows Cross-Platform Support
+
+- Q: How to handle Windows paths with backslashes? → A:
+  - Backslash is NOT an escape character in unquoted words
+  - Paths like `C:\Users\name` and `d:\pictures\` work correctly
+  - For filenames with spaces, use quotes: `"file name"`
+
+- Q: How to handle Windows drive letters? → A:
+  - Typing `c:` or `D:` is automatically converted to `cd c:` or `cd D:`
+  - Platform-specific detection via build tags (`drive_windows.go`, `drive_unix.go`)
+
+- Q: How to handle PATH vs Path? → A:
+  - Windows uses `Path`, Unix uses `PATH`
+  - `env.GetPath()` function tries both, Windows convention first
+  - `env.GetPathFrom(e)` for getting PATH from Environment object
+
+- Q: How to detect executables on Windows? → A:
+  - Unix: checks mode bits (mode & 0111)
+  - Windows: checks extensions (.exe, .cmd, .bat, .com, .ps1)
+  - Platform-specific via build tags (`executable_windows.go`, `executable_unix.go`)
+
+- Q: How to handle `ls -l` owner/group on Windows? → A:
+  - Windows uses SIDs, not Unix uid/gid
+  - `getOwnerGroup()` returns `-` placeholders on Windows
+  - Platform-specific via build tags (`ls_windows.go`, `ls_unix.go`)
+
+#### PATH Executable Completion Caching
+
+- Q: How to avoid latency from scanning PATH on every keystroke? → A:
+  - Executables are cached at startup in `pathExecCache` and `pathExecCacheSet`
+  - `scanPathExecutables()` runs once during `EnablePathCompletion()`
+  - `RefreshPathCache()` available if PATH changes during session
+  - Completion now just filters the cached list (O(n) string comparison)
+
+#### search Command Enhancements
+
+- Q: How to display absolute paths in search results? → A:
+  - Added `-a, --absolute` option
+  - Uses `filepath.Abs()` to convert relative paths
+
+- Q: How to handle quoting in search expressions? → A:
+  - Quoted arguments are always treated as patterns, never as operators/predicates
+  - `search . "AND"` finds file named 'AND' (not treated as operator)
+  - `search . "isFile"` finds file named 'isFile' (not treated as predicate)
+  - Parser tracks quoting info via `ArgsWithInfo` field in Command struct
+
+- Q: How to handle Windows drive letters in search? → A:
+  - `d:` is normalized to `d:\` for proper path joining
+  - Prevents `filepath.Join("d:", "2023")` producing `d:2023` instead of `d:\2023`
+
+- Q: How to handle permission errors on Windows? → A:
+  - System folders like "System Volume Information" are inaccessible
+  - Permission errors are silently skipped (no error output)
+
 ## Assumptions
 
 - Users have basic familiarity with command-line interfaces
@@ -589,9 +653,17 @@ The `--exclude` option uses standard glob patterns and can be repeated:
 
 The `search` command finds files and directories matching glob patterns with full logical expression support:
 - First argument: directory to search in (required)
-- Following arguments: expression with patterns and optional logical operators
+- Following arguments: expression with patterns, type predicates, and optional logical operators
 - `-r, --recursive` - Search subdirectories recursively
 - `-l, --level=<n>` - Maximum depth level (0 = unlimited, default)
+
+**Type Predicates** (case-insensitive):
+- `isFile` - Match regular files only (not directories or symlinks)
+- `isDir` - Match directories only
+- `isLink` - Match symbolic links
+- `isSymlink` - Match symbolic links (alias for isLink)
+- `isHardlink` - Match regular files (hard links cannot be reliably detected)
+- `isExec` - Match executable files
 
 **Logical Operators** (case-insensitive):
 - `AND`, `&&` - Both patterns must match
@@ -606,12 +678,26 @@ Simple examples (backward compatible):
 - `search . "*.go"` - Find Go files in current directory
 - `search . "*.go" "*.md" -r` - Find Go OR Markdown files (implicit OR)
 
+Type predicate examples:
+- `search . "*.go" AND isFile -r` - Find Go files only (exclude directories named *.go)
+- `search . isDir -r` - Find all directories
+- `search . isExec -r` - Find all executable files
+- `search . isLink -r` - Find all symbolic links
+- `search . "*config*" AND isDir -r` - Find directories with "config" in name
+
 Logical expression examples:
 - `search . "*.go" AND NOT "*_test.go" -r` - Find Go files excluding tests
 - `search . "test_*" AND "*.py" -r` - Find Python test files
 - `search . "*.go" XOR "*.mod" -r` - Find .go OR .mod but not both
 - `search . NOT "*.log" -r` - Find all files except .log files
-- `search . "(" "*.go" OR "*.md" ")" AND NOT "*_test*" -r` - Complex expression
+- `search . "(" "*.go" OR "*.md" ")" AND NOT "*_test*" AND isFile -r` - Complex expression
+
+**Quoting**: Quoted arguments (`"..."` or `'...'`) are always treated as literal patterns, never as operators or predicates. Use this to search for files named AND, OR, isFile, etc.
+
+Quoting examples:
+- `search . "AND"` - Find a file named 'AND' (quoted = pattern)
+- `search . "isFile"` - Find a file named 'isFile' (quoted = pattern)
+- `search . "OR" "NOT"` - Find files named 'OR' or 'NOT'
 
 ### Performance Results
 

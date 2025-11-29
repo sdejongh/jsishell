@@ -279,21 +279,15 @@ func (l *Lexer) readWord(startPos Position) Token {
 	start := l.pos
 
 	for l.ch != 0 && !isWordTerminator(l.ch) {
-		if l.ch == '\\' {
-			// Escape sequence in word
-			l.readChar()
-			if l.ch != 0 {
-				l.readChar()
-			}
-		} else {
-			l.readChar()
-		}
+		// All characters including backslash are kept literally.
+		// Backslash is NOT an escape character in unquoted words.
+		// This ensures Windows paths like C:\Users\name work correctly.
+		// For filenames with spaces, use quotes: "file name" or 'file name'
+		l.readChar()
 	}
 
 	value := l.input[start:l.pos]
-	literal := unescapeWord(value)
-
-	return Token{Type: TokenWord, Value: value, Literal: literal, Pos: startPos}
+	return Token{Type: TokenWord, Value: value, Literal: value, Pos: startPos}
 }
 
 // isIdentChar returns true if ch is a valid identifier character.
@@ -316,34 +310,3 @@ func isWordTerminator(ch rune) bool {
 	return unicode.IsSpace(ch) || ch == '"' || ch == '\'' || ch == '$' || ch == '='
 }
 
-// unescapeWord processes escape sequences in a word.
-func unescapeWord(s string) string {
-	if !strings.Contains(s, "\\") {
-		return s
-	}
-
-	var result strings.Builder
-	i := 0
-	for i < len(s) {
-		if s[i] == '\\' && i+1 < len(s) {
-			// Escape sequence
-			next := s[i+1]
-			switch next {
-			case 'n':
-				result.WriteRune('\n')
-			case 't':
-				result.WriteRune('\t')
-			case '\\':
-				result.WriteRune('\\')
-			default:
-				// Unknown escape, keep the escaped character
-				result.WriteByte(next)
-			}
-			i += 2
-		} else {
-			result.WriteByte(s[i])
-			i++
-		}
-	}
-	return result.String()
-}

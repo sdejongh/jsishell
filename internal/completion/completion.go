@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/sdejongh/jsishell/internal/env"
 )
 
 // CompletionType indicates what kind of completion candidate this is.
@@ -49,19 +51,23 @@ type CommandDef struct {
 
 // Completer provides command and path completion functionality.
 type Completer struct {
-	commands       []string              // Known command names (for backward compatibility)
-	commandDefs    map[string]CommandDef // Command definitions with options
-	pathExecutable bool                  // Whether to include PATH executables in completion
-	pathDirs       []string              // Directories from PATH environment variable
+	commands         []string              // Known command names (for backward compatibility)
+	commandDefs      map[string]CommandDef // Command definitions with options
+	pathExecutable   bool                  // Whether to include PATH executables in completion
+	pathDirs         []string              // Directories from PATH environment variable
+	pathExecCache    []string              // Cached list of executable names from PATH
+	pathExecCacheSet map[string]bool       // Set for quick lookup of cached executables
 }
 
 // NewCompleter creates a new Completer with the given command list.
 func NewCompleter(commands []string) *Completer {
 	return &Completer{
-		commands:       commands,
-		commandDefs:    make(map[string]CommandDef),
-		pathExecutable: false,
-		pathDirs:       nil,
+		commands:         commands,
+		commandDefs:      make(map[string]CommandDef),
+		pathExecutable:   false,
+		pathDirs:         nil,
+		pathExecCache:    nil,
+		pathExecCacheSet: nil,
 	}
 }
 
@@ -76,10 +82,12 @@ func NewCompleterWithDefs(defs []CommandDef) *Completer {
 	}
 
 	return &Completer{
-		commands:       commands,
-		commandDefs:    commandDefs,
-		pathExecutable: false,
-		pathDirs:       nil,
+		commands:         commands,
+		commandDefs:      commandDefs,
+		pathExecutable:   false,
+		pathDirs:         nil,
+		pathExecCache:    nil,
+		pathExecCacheSet: nil,
 	}
 }
 
@@ -100,29 +108,38 @@ func (c *Completer) SetCommandDefs(defs []CommandDef) {
 }
 
 // EnablePathCompletion enables completion of executables from PATH.
+// This scans all PATH directories once and caches the results.
 func (c *Completer) EnablePathCompletion(pathEnv string) {
 	c.pathExecutable = true
 	if pathEnv == "" {
-		pathEnv = os.Getenv("PATH")
+		pathEnv = env.GetPath() // Handles PATH vs Path (Windows)
 	}
 	c.pathDirs = filepath.SplitList(pathEnv)
+
+	// Scan PATH directories and cache executables
+	c.scanPathExecutables()
 }
 
 // DisablePathCompletion disables completion of executables from PATH.
 func (c *Completer) DisablePathCompletion() {
 	c.pathExecutable = false
 	c.pathDirs = nil
+	c.pathExecCache = nil
+	c.pathExecCacheSet = nil
 }
 
-// completePathExecutables returns executables from PATH matching the prefix.
-func (c *Completer) completePathExecutables(prefix string) []CompletionCandidate {
-	if !c.pathExecutable || len(c.pathDirs) == 0 {
-		return nil
+// RefreshPathCache rescans PATH directories and updates the cache.
+// Call this if PATH has changed during the session.
+func (c *Completer) RefreshPathCache() {
+	if c.pathExecutable {
+		c.scanPathExecutables()
 	}
+}
 
-	var candidates []CompletionCandidate
-	seen := make(map[string]bool)
-	lowerPrefix := strings.ToLower(prefix)
+// scanPathExecutables scans all PATH directories and caches executable names.
+func (c *Completer) scanPathExecutables() {
+	c.pathExecCache = nil
+	c.pathExecCacheSet = make(map[string]bool)
 
 	for _, dir := range c.pathDirs {
 		if dir == "" {
@@ -141,28 +158,41 @@ func (c *Completer) completePathExecutables(prefix string) []CompletionCandidate
 
 			name := entry.Name()
 			// Skip if already seen (first occurrence in PATH wins)
-			if seen[name] {
+			if c.pathExecCacheSet[name] {
 				continue
 			}
 
-			// Check prefix match
-			if !strings.HasPrefix(strings.ToLower(name), lowerPrefix) {
-				continue
-			}
-
-			// Check if executable
+			// Check if executable (platform-specific)
 			info, err := entry.Info()
 			if err != nil {
 				continue
 			}
 
-			if info.Mode()&0111 != 0 {
-				seen[name] = true
-				candidates = append(candidates, CompletionCandidate{
-					Text: name,
-					Type: TypeExecutable,
-				})
+			if isExecutable(info) {
+				displayName := executableName(name)
+				c.pathExecCacheSet[displayName] = true
+				c.pathExecCache = append(c.pathExecCache, displayName)
 			}
+		}
+	}
+}
+
+// completePathExecutables returns executables from PATH matching the prefix.
+// Uses the cached list of executables for fast lookup.
+func (c *Completer) completePathExecutables(prefix string) []CompletionCandidate {
+	if !c.pathExecutable || len(c.pathExecCache) == 0 {
+		return nil
+	}
+
+	var candidates []CompletionCandidate
+	lowerPrefix := strings.ToLower(prefix)
+
+	for _, name := range c.pathExecCache {
+		if strings.HasPrefix(strings.ToLower(name), lowerPrefix) {
+			candidates = append(candidates, CompletionCandidate{
+				Text: name,
+				Type: TypeExecutable,
+			})
 		}
 	}
 

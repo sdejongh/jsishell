@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/sdejongh/jsishell/internal/env"
@@ -73,12 +74,35 @@ func (p *Parser) Parse() (*Command, error) {
 			}
 
 		case lexer.TokenWord, lexer.TokenString, lexer.TokenVariable:
-			cmd.Args = append(cmd.Args, p.expandValue(tok))
+			value := p.expandValue(tok)
+			isQuoted := tok.Type == lexer.TokenString
+
+			// Expand globs for unquoted arguments containing wildcards
+			if !isQuoted && containsGlobPattern(value) {
+				expanded := expandGlob(value)
+				for _, exp := range expanded {
+					cmd.Args = append(cmd.Args, exp)
+					cmd.ArgsWithInfo = append(cmd.ArgsWithInfo, Arg{
+						Value:  exp,
+						Quoted: false,
+					})
+				}
+			} else {
+				cmd.Args = append(cmd.Args, value)
+				cmd.ArgsWithInfo = append(cmd.ArgsWithInfo, Arg{
+					Value:  value,
+					Quoted: isQuoted,
+				})
+			}
 			p.advance()
 
 		case lexer.TokenEquals:
 			// Unexpected equals - treat as argument
 			cmd.Args = append(cmd.Args, tok.Literal)
+			cmd.ArgsWithInfo = append(cmd.ArgsWithInfo, Arg{
+				Value:  tok.Literal,
+				Quoted: false,
+			})
 			p.advance()
 
 		default:
@@ -276,4 +300,26 @@ func ParseInputWithEnv(input string, e *env.Environment) (*Command, error) {
 		cmd.RawInput = input
 	}
 	return cmd, err
+}
+
+// containsGlobPattern checks if a string contains glob wildcards.
+func containsGlobPattern(s string) bool {
+	for _, c := range s {
+		switch c {
+		case '*', '?', '[':
+			return true
+		}
+	}
+	return false
+}
+
+// expandGlob expands a glob pattern to matching file paths.
+// If no files match, returns the original pattern (bash behavior).
+func expandGlob(pattern string) []string {
+	matches, err := filepath.Glob(pattern)
+	if err != nil || len(matches) == 0 {
+		// No matches or error: return original pattern
+		return []string{pattern}
+	}
+	return matches
 }

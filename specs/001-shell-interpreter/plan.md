@@ -372,10 +372,11 @@ tests/
    - OR
 
 3. **Implementation** (`internal/builtins/searchexpr.go`):
-   - `SearchExpr` interface with `Evaluate(filename) bool` method
-   - AST nodes: `PatternExpr`, `AndExpr`, `OrExpr`, `XorExpr`, `NotExpr`
+   - `SearchExpr` interface with `Evaluate(info *FileInfo) bool` method
+   - `FileInfo` struct with Name, Mode, IsDir, IsLink, LinkTarget fields
+   - AST nodes: `PatternExpr`, `AndExpr`, `OrExpr`, `XorExpr`, `NotExpr`, `TypeExpr`
    - Recursive descent parser for expression parsing
-   - Tokenizer handles patterns, operators, and parentheses
+   - Tokenizer handles patterns, operators, type predicates, and parentheses
 
 4. **Parser Architecture**:
    ```go
@@ -385,7 +386,7 @@ tests/
    // xorExpr  = andExpr (("XOR" | "^") andExpr)*
    // andExpr  = unaryExpr (("AND" | "&&") unaryExpr)*
    // unaryExpr = ("NOT" | "!") unaryExpr | primary
-   // primary  = pattern | "(" expr ")"
+   // primary  = pattern | typePredicate | "(" expr ")"
    ```
 
 5. **Backward Compatibility**:
@@ -402,3 +403,178 @@ tests/
    search . "(" "*.go" OR "*.md" ")" AND NOT "*_test*" -r
        # Go or Markdown files, excluding test files
    ```
+
+#### search Type Predicates
+
+1. **Type Predicates** (case-insensitive):
+   - `isFile` - Match regular files only (not directories or symlinks)
+   - `isDir` - Match directories only
+   - `isLink` - Match symbolic links
+   - `isSymlink` - Match symbolic links (alias for isLink)
+   - `isHardlink` - Match regular files (hard links cannot be reliably detected)
+   - `isExec` - Match executable files (mode & 0111 != 0)
+
+2. **Implementation**:
+   - `TypePredicate` enum in `internal/builtins/searchexpr.go`
+   - `TypeExpr` struct implementing `SearchExpr` interface
+   - `isTypePredicate()` function for detecting predicates (case-insensitive)
+   - `FileInfo` struct passed to `Evaluate()` with file metadata
+
+3. **Type Predicate Examples**:
+   ```
+   search . "*.go" AND isFile -r       # Find Go files only (exclude directories)
+   search . isDir -r                   # Find all directories
+   search . isExec -r                  # Find all executable files
+   search . isLink -r                  # Find all symbolic links
+   search . "*config*" AND isDir -r    # Find directories with "config" in name
+   search . "*.sh" AND isExec -r       # Find executable shell scripts
+   search . NOT isDir -r               # Find everything except directories
+   ```
+
+#### Quoting for Literal Patterns
+
+1. **Problem**: Files named like operators (AND, OR, NOT, XOR) or predicates (isFile, isDir) would be interpreted as operators/predicates instead of patterns.
+
+2. **Solution**: Quoted arguments are always treated as literal patterns, never as operators or predicates.
+
+3. **Implementation**:
+   - `parser.Arg` struct with `Value` and `Quoted` fields in `internal/parser/ast.go`
+   - Parser populates `ArgsWithInfo` with quoting information from lexer tokens
+   - `ExprArg` struct in `searchexpr.go` carries quoting info
+   - `ParseSearchExpressionWithQuoting()` respects quoting when tokenizing
+   - Quoted args bypass operator/predicate detection in lexer
+
+4. **Quoting Examples**:
+   ```
+   search . "AND"                      # Find file named 'AND' (quoted = pattern)
+   search . "isFile"                   # Find file named 'isFile' (quoted = pattern)
+   search . "OR" "NOT"                 # Find files named 'OR' or 'NOT'
+   search . "*.go" AND "isDir" -r      # Pattern *.go AND pattern 'isDir'
+   ```
+
+### v1.4.0 Features
+
+#### Glob Expansion in Parser
+
+1. **Purpose**: Expand wildcard patterns like `*.go` in command arguments.
+
+2. **Implementation** (`internal/parser/parser.go`):
+   ```go
+   // containsGlobPattern checks if a string contains glob wildcards.
+   func containsGlobPattern(s string) bool {
+       for _, c := range s {
+           switch c {
+           case '*', '?', '[':
+               return true
+           }
+       }
+       return false
+   }
+
+   // expandGlob expands a glob pattern to matching file paths.
+   func expandGlob(pattern string) []string {
+       matches, err := filepath.Glob(pattern)
+       if err != nil || len(matches) == 0 {
+           return []string{pattern}  // No matches: return original
+       }
+       return matches
+   }
+   ```
+
+3. **Behavior**:
+   - Unquoted arguments containing `*`, `?`, or `[` are expanded
+   - Quoted arguments (`"*.go"`) are never expanded
+   - If no files match, original pattern is preserved (bash behavior)
+   - Multiple matches result in multiple arguments
+
+#### Windows Cross-Platform Support
+
+1. **Windows Path Handling** (`internal/lexer/lexer.go`):
+   - Backslash is NOT an escape character in unquoted words
+   - Paths like `C:\Users\name` and `d:\pictures\` work correctly
+   - For filenames with spaces, use quotes: `"file name"`
+
+2. **Drive Letter Navigation** (`internal/executor/drive_windows.go`, `drive_unix.go`):
+   ```go
+   // Windows: isWindowsDriveLetter returns true for "c:", "D:", etc.
+   func isWindowsDriveLetter(name string) bool {
+       if len(name) != 2 || name[1] != ':' {
+           return false
+       }
+       letter := name[0]
+       return (letter >= 'a' && letter <= 'z') || (letter >= 'A' && letter <= 'Z')
+   }
+   ```
+   - Typing `c:` or `D:` is converted to `cd c:` or `cd D:`
+   - Unix version always returns false
+
+3. **PATH Environment Variable** (`internal/env/path.go`):
+   ```go
+   // GetPath returns PATH value, handling Windows "Path" vs Unix "PATH"
+   func GetPath() string {
+       if path := os.Getenv("Path"); path != "" {
+           return path
+       }
+       return os.Getenv("PATH")
+   }
+   ```
+
+4. **Executable Detection** (`internal/completion/executable_windows.go`, `executable_unix.go`):
+   - Unix: checks mode bits (mode & 0111)
+   - Windows: checks extensions (.exe, .cmd, .bat, .com, .ps1)
+
+5. **Owner/Group Display** (`internal/builtins/ls_windows.go`, `ls_unix.go`):
+   - Unix: uses syscall.Stat_t for uid/gid lookup
+   - Windows: returns `-` placeholders (Windows uses SIDs)
+
+#### PATH Executable Completion Caching
+
+1. **Problem**: Scanning PATH directories on every keystroke caused latency.
+
+2. **Solution**: Cache executables at startup.
+   ```go
+   type Completer struct {
+       // ... existing fields ...
+       pathExecCache    []string        // Cached executable names
+       pathExecCacheSet map[string]bool // For deduplication
+   }
+
+   func (c *Completer) EnablePathCompletion(pathEnv string) {
+       c.pathExecutable = true
+       c.pathDirs = filepath.SplitList(pathEnv)
+       c.scanPathExecutables()  // Scan once at startup
+   }
+
+   func (c *Completer) scanPathExecutables() {
+       c.pathExecCache = nil
+       c.pathExecCacheSet = make(map[string]bool)
+       for _, dir := range c.pathDirs {
+           entries, _ := os.ReadDir(dir)
+           for _, entry := range entries {
+               if !entry.IsDir() && isExecutable(entry.Info()) {
+                   name := executableName(entry.Name())
+                   if !c.pathExecCacheSet[name] {
+                       c.pathExecCacheSet[name] = true
+                       c.pathExecCache = append(c.pathExecCache, name)
+                   }
+               }
+           }
+       }
+   }
+   ```
+
+3. **Completion now O(n) string filtering** instead of O(dirs × files) filesystem scan.
+
+#### search Command Enhancements
+
+1. **Absolute Path Option**:
+   - Added `-a, --absolute` flag
+   - Uses `filepath.Abs()` to convert paths
+
+2. **Windows Drive Letter Normalization**:
+   - `d:` normalized to `d:\` for proper path joining
+   - Prevents `filepath.Join("d:", "2023")` producing `d:2023`
+
+3. **Permission Error Handling**:
+   - System folders like "System Volume Information" are silently skipped
+   - `os.IsPermission(err)` check before reporting errors

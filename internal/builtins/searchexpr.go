@@ -2,15 +2,25 @@ package builtins
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"unicode"
 )
 
-// SearchExpr represents a search expression that can be evaluated against a filename.
+// FileInfo contains information about a file for expression evaluation.
+type FileInfo struct {
+	Name       string      // Base name of the file
+	Mode       os.FileMode // File mode and permissions
+	IsDir      bool        // True if directory
+	IsLink     bool        // True if symbolic link
+	LinkTarget string      // Target of symbolic link (if applicable)
+}
+
+// SearchExpr represents a search expression that can be evaluated against a file.
 type SearchExpr interface {
-	// Evaluate returns true if the filename matches the expression.
-	Evaluate(filename string) bool
+	// Evaluate returns true if the file matches the expression.
+	Evaluate(info *FileInfo) bool
 	// String returns a string representation of the expression.
 	String() string
 }
@@ -20,8 +30,8 @@ type PatternExpr struct {
 	Pattern string
 }
 
-func (p *PatternExpr) Evaluate(filename string) bool {
-	matched, err := filepath.Match(p.Pattern, filename)
+func (p *PatternExpr) Evaluate(info *FileInfo) bool {
+	matched, err := filepath.Match(p.Pattern, info.Name)
 	if err != nil {
 		return false
 	}
@@ -32,13 +42,71 @@ func (p *PatternExpr) String() string {
 	return fmt.Sprintf("%q", p.Pattern)
 }
 
+// TypePredicate represents the type of file type predicate.
+type TypePredicate int
+
+const (
+	PredicateIsFile TypePredicate = iota
+	PredicateIsDir
+	PredicateIsLink
+	PredicateIsSymlink
+	PredicateIsHardlink
+	PredicateIsExec
+)
+
+// TypeExpr represents a file type predicate (isFile, isDir, etc.).
+type TypeExpr struct {
+	Predicate TypePredicate
+}
+
+func (t *TypeExpr) Evaluate(info *FileInfo) bool {
+	switch t.Predicate {
+	case PredicateIsFile:
+		return !info.IsDir && !info.IsLink
+	case PredicateIsDir:
+		return info.IsDir
+	case PredicateIsLink:
+		return info.IsLink
+	case PredicateIsSymlink:
+		return info.IsLink // Symbolic link
+	case PredicateIsHardlink:
+		// Hard links are regular files with link count > 1
+		// We can't easily detect this without additional syscalls
+		// For now, treat as regular file that is not a symlink
+		return !info.IsDir && !info.IsLink
+	case PredicateIsExec:
+		return info.Mode&0111 != 0 && !info.IsDir
+	default:
+		return false
+	}
+}
+
+func (t *TypeExpr) String() string {
+	switch t.Predicate {
+	case PredicateIsFile:
+		return "isFile"
+	case PredicateIsDir:
+		return "isDir"
+	case PredicateIsLink:
+		return "isLink"
+	case PredicateIsSymlink:
+		return "isSymlink"
+	case PredicateIsHardlink:
+		return "isHardlink"
+	case PredicateIsExec:
+		return "isExec"
+	default:
+		return "unknown"
+	}
+}
+
 // NotExpr represents a NOT expression.
 type NotExpr struct {
 	Expr SearchExpr
 }
 
-func (n *NotExpr) Evaluate(filename string) bool {
-	return !n.Expr.Evaluate(filename)
+func (n *NotExpr) Evaluate(info *FileInfo) bool {
+	return !n.Expr.Evaluate(info)
 }
 
 func (n *NotExpr) String() string {
@@ -51,8 +119,8 @@ type AndExpr struct {
 	Right SearchExpr
 }
 
-func (a *AndExpr) Evaluate(filename string) bool {
-	return a.Left.Evaluate(filename) && a.Right.Evaluate(filename)
+func (a *AndExpr) Evaluate(info *FileInfo) bool {
+	return a.Left.Evaluate(info) && a.Right.Evaluate(info)
 }
 
 func (a *AndExpr) String() string {
@@ -65,8 +133,8 @@ type OrExpr struct {
 	Right SearchExpr
 }
 
-func (o *OrExpr) Evaluate(filename string) bool {
-	return o.Left.Evaluate(filename) || o.Right.Evaluate(filename)
+func (o *OrExpr) Evaluate(info *FileInfo) bool {
+	return o.Left.Evaluate(info) || o.Right.Evaluate(info)
 }
 
 func (o *OrExpr) String() string {
@@ -79,9 +147,9 @@ type XorExpr struct {
 	Right SearchExpr
 }
 
-func (x *XorExpr) Evaluate(filename string) bool {
-	left := x.Left.Evaluate(filename)
-	right := x.Right.Evaluate(filename)
+func (x *XorExpr) Evaluate(info *FileInfo) bool {
+	left := x.Left.Evaluate(info)
+	right := x.Right.Evaluate(info)
 	return (left || right) && !(left && right)
 }
 
@@ -100,23 +168,55 @@ const (
 	tokNot
 	tokLParen
 	tokRParen
+	tokTypePredicate
 	tokEOF
 )
 
 type exprToken struct {
-	typ   exprTokenType
-	value string
+	typ       exprTokenType
+	value     string
+	predicate TypePredicate // For tokTypePredicate
+}
+
+// isTypePredicate checks if a string is a type predicate and returns the predicate type.
+func isTypePredicate(s string) (TypePredicate, bool) {
+	lower := strings.ToLower(s)
+	switch lower {
+	case "isfile":
+		return PredicateIsFile, true
+	case "isdir":
+		return PredicateIsDir, true
+	case "islink":
+		return PredicateIsLink, true
+	case "issymlink":
+		return PredicateIsSymlink, true
+	case "ishardlink":
+		return PredicateIsHardlink, true
+	case "isexec":
+		return PredicateIsExec, true
+	default:
+		return 0, false
+	}
 }
 
 // exprLexer tokenizes the search expression arguments.
 type exprLexer struct {
-	args    []string
+	args    []ExprArg
 	pos     int
 	tokens  []exprToken
 	current int
 }
 
 func newExprLexer(args []string) *exprLexer {
+	// Convert to ExprArg without quoting info for backward compatibility
+	exprArgs := make([]ExprArg, len(args))
+	for i, arg := range args {
+		exprArgs[i] = ExprArg{Value: arg, Quoted: false}
+	}
+	return newExprLexerWithQuoting(exprArgs)
+}
+
+func newExprLexerWithQuoting(args []ExprArg) *exprLexer {
 	return &exprLexer{
 		args:    args,
 		pos:     0,
@@ -133,8 +233,14 @@ func (l *exprLexer) tokenize() error {
 		arg := l.args[l.pos]
 		l.pos++
 
-		// Handle operators (case-insensitive)
-		upper := strings.ToUpper(arg)
+		// If the argument is quoted, it's always a pattern (never an operator or predicate)
+		if arg.Quoted {
+			l.tokens = append(l.tokens, exprToken{typ: tokPattern, value: arg.Value})
+			continue
+		}
+
+		// Handle operators (case-insensitive) - only for non-quoted arguments
+		upper := strings.ToUpper(arg.Value)
 		switch upper {
 		case "AND", "&&":
 			l.tokens = append(l.tokens, exprToken{typ: tokAnd, value: "AND"})
@@ -145,9 +251,14 @@ func (l *exprLexer) tokenize() error {
 		case "NOT", "!":
 			l.tokens = append(l.tokens, exprToken{typ: tokNot, value: "NOT"})
 		default:
-			// Check for parentheses embedded in the argument
-			if err := l.tokenizeWithParens(arg); err != nil {
-				return err
+			// Check for type predicates
+			if pred, ok := isTypePredicate(arg.Value); ok {
+				l.tokens = append(l.tokens, exprToken{typ: tokTypePredicate, value: arg.Value, predicate: pred})
+			} else {
+				// Check for parentheses embedded in the argument
+				if err := l.tokenizeWithParens(arg.Value); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -179,24 +290,33 @@ func (l *exprLexer) tokenizeWithParens(arg string) error {
 			}
 			pattern := strings.TrimSpace(arg[start:i])
 			if pattern != "" {
-				// Check if it's an operator
-				upper := strings.ToUpper(pattern)
-				switch upper {
-				case "AND", "&&":
-					l.tokens = append(l.tokens, exprToken{typ: tokAnd, value: "AND"})
-				case "OR", "||":
-					l.tokens = append(l.tokens, exprToken{typ: tokOr, value: "OR"})
-				case "XOR", "^":
-					l.tokens = append(l.tokens, exprToken{typ: tokXor, value: "XOR"})
-				case "NOT", "!":
-					l.tokens = append(l.tokens, exprToken{typ: tokNot, value: "NOT"})
-				default:
-					l.tokens = append(l.tokens, exprToken{typ: tokPattern, value: pattern})
-				}
+				l.addPatternOrOperator(pattern)
 			}
 		}
 	}
 	return nil
+}
+
+// addPatternOrOperator adds a token for a pattern, operator, or type predicate.
+func (l *exprLexer) addPatternOrOperator(pattern string) {
+	upper := strings.ToUpper(pattern)
+	switch upper {
+	case "AND", "&&":
+		l.tokens = append(l.tokens, exprToken{typ: tokAnd, value: "AND"})
+	case "OR", "||":
+		l.tokens = append(l.tokens, exprToken{typ: tokOr, value: "OR"})
+	case "XOR", "^":
+		l.tokens = append(l.tokens, exprToken{typ: tokXor, value: "XOR"})
+	case "NOT", "!":
+		l.tokens = append(l.tokens, exprToken{typ: tokNot, value: "NOT"})
+	default:
+		// Check for type predicates
+		if pred, ok := isTypePredicate(pattern); ok {
+			l.tokens = append(l.tokens, exprToken{typ: tokTypePredicate, value: pattern, predicate: pred})
+		} else {
+			l.tokens = append(l.tokens, exprToken{typ: tokPattern, value: pattern})
+		}
+	}
 }
 
 func (l *exprLexer) peek() exprToken {
@@ -231,7 +351,7 @@ func newExprParser(lexer *exprLexer) *exprParser {
 //	xorExpr  = andExpr (("XOR" | "^") andExpr)*
 //	andExpr  = unaryExpr (("AND" | "&&") unaryExpr)*
 //	unaryExpr = ("NOT" | "!") unaryExpr | primary
-//	primary  = pattern | "(" expr ")"
+//	primary  = pattern | typePredicate | "(" expr ")"
 func (p *exprParser) Parse() (SearchExpr, error) {
 	expr, err := p.parseOrExpr()
 	if err != nil {
@@ -333,6 +453,10 @@ func (p *exprParser) parsePrimary() (SearchExpr, error) {
 		p.lexer.next()
 		return &PatternExpr{Pattern: tok.value}, nil
 
+	case tokTypePredicate:
+		p.lexer.next()
+		return &TypeExpr{Predicate: tok.predicate}, nil
+
 	case tokEOF:
 		return nil, fmt.Errorf("unexpected end of expression")
 
@@ -341,43 +465,88 @@ func (p *exprParser) parsePrimary() (SearchExpr, error) {
 	}
 }
 
-// ParseSearchExpression parses a list of arguments into a SearchExpr.
-// If no operators are found, it creates an implicit OR of all patterns.
-func ParseSearchExpression(args []string) (SearchExpr, error) {
-	if len(args) == 0 {
-		return nil, fmt.Errorf("no patterns provided")
-	}
-
-	// Check if we have any operators
-	hasOperators := false
+// hasOperatorsOrPredicates checks if arguments contain operators or type predicates.
+func hasOperatorsOrPredicates(args []string) bool {
 	for _, arg := range args {
 		upper := strings.ToUpper(arg)
 		if upper == "AND" || upper == "OR" || upper == "XOR" || upper == "NOT" ||
 			upper == "&&" || upper == "||" || upper == "^" || upper == "!" ||
 			strings.Contains(arg, "(") || strings.Contains(arg, ")") {
-			hasOperators = true
-			break
+			return true
+		}
+		// Check for type predicates
+		if _, ok := isTypePredicate(arg); ok {
+			return true
 		}
 	}
+	return false
+}
 
-	// If no operators, create implicit OR of all patterns (backward compatible)
-	if !hasOperators {
+// hasOperatorsOrPredicatesWithQuoting checks if non-quoted arguments contain operators or type predicates.
+// Quoted arguments are never considered as operators or predicates.
+func hasOperatorsOrPredicatesWithQuoting(args []ExprArg) bool {
+	for _, arg := range args {
+		// Skip quoted arguments - they are always patterns
+		if arg.Quoted {
+			continue
+		}
+		upper := strings.ToUpper(arg.Value)
+		if upper == "AND" || upper == "OR" || upper == "XOR" || upper == "NOT" ||
+			upper == "&&" || upper == "||" || upper == "^" || upper == "!" ||
+			strings.Contains(arg.Value, "(") || strings.Contains(arg.Value, ")") {
+			return true
+		}
+		// Check for type predicates
+		if _, ok := isTypePredicate(arg.Value); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// ExprArg represents an argument with quoting information for expression parsing.
+type ExprArg struct {
+	Value  string
+	Quoted bool
+}
+
+// ParseSearchExpression parses a list of arguments into a SearchExpr.
+// If no operators are found, it creates an implicit OR of all patterns.
+func ParseSearchExpression(args []string) (SearchExpr, error) {
+	// Convert to ExprArg without quoting info for backward compatibility
+	exprArgs := make([]ExprArg, len(args))
+	for i, arg := range args {
+		exprArgs[i] = ExprArg{Value: arg, Quoted: false}
+	}
+	return ParseSearchExpressionWithQuoting(exprArgs)
+}
+
+// ParseSearchExpressionWithQuoting parses arguments with quoting information.
+// Quoted arguments are always treated as patterns, never as operators or predicates.
+func ParseSearchExpressionWithQuoting(args []ExprArg) (SearchExpr, error) {
+	if len(args) == 0 {
+		return nil, fmt.Errorf("no patterns provided")
+	}
+
+	// Check if we have any operators or predicates (only in non-quoted args)
+	if !hasOperatorsOrPredicatesWithQuoting(args) {
+		// If no operators, create implicit OR of all patterns (backward compatible)
 		if len(args) == 1 {
-			return &PatternExpr{Pattern: args[0]}, nil
+			return &PatternExpr{Pattern: args[0].Value}, nil
 		}
 		// Create OR chain
-		var expr SearchExpr = &PatternExpr{Pattern: args[0]}
+		var expr SearchExpr = &PatternExpr{Pattern: args[0].Value}
 		for i := 1; i < len(args); i++ {
 			expr = &OrExpr{
 				Left:  expr,
-				Right: &PatternExpr{Pattern: args[i]},
+				Right: &PatternExpr{Pattern: args[i].Value},
 			}
 		}
 		return expr, nil
 	}
 
 	// Parse with operators
-	lexer := newExprLexer(args)
+	lexer := newExprLexerWithQuoting(args)
 	if err := lexer.tokenize(); err != nil {
 		return nil, err
 	}

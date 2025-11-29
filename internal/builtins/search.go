@@ -20,6 +20,7 @@ func SearchDefinition() Definition {
 		Options: []OptionDef{
 			{Long: "--recursive", Short: "-r", Description: "Search recursively in subdirectories"},
 			{Long: "--level", Short: "-l", HasValue: true, Description: "Maximum depth level (0 = unlimited, default)"},
+			{Long: "--absolute", Short: "-a", Description: "Display absolute paths"},
 			{Long: "--help", Description: "Show help message"},
 		},
 	}
@@ -28,7 +29,8 @@ func SearchDefinition() Definition {
 // searchOptions holds the options for the search command.
 type searchOptions struct {
 	recursive bool
-	maxLevel  int // 0 means unlimited
+	maxLevel  int  // 0 means unlimited
+	absolute  bool // display absolute paths
 }
 
 func searchHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int, error) {
@@ -42,6 +44,7 @@ func searchHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (
 	opts := searchOptions{
 		recursive: cmd.HasFlag("-r", "--recursive"),
 		maxLevel:  0, // default: unlimited
+		absolute:  cmd.HasFlag("-a", "--absolute"),
 	}
 
 	// Parse --level option
@@ -64,11 +67,30 @@ func searchHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (
 	// First argument is the directory
 	searchDir := cmd.Args[0]
 
-	// Remaining arguments form the search expression
-	exprArgs := cmd.Args[1:]
+	// Normalize Windows drive letters: "d:" -> "d:\" for proper path joining
+	// On Windows, "d:" means current directory on drive D, while "d:\" means root
+	if len(searchDir) == 2 && searchDir[1] == ':' {
+		searchDir = searchDir + string(filepath.Separator)
+	}
 
-	// Parse the search expression
-	expr, err := ParseSearchExpression(exprArgs)
+	// Build expression arguments with quoting information
+	var exprArgs []ExprArg
+	if len(cmd.ArgsWithInfo) >= 2 {
+		// Use ArgsWithInfo if available (has quoting information)
+		exprArgs = make([]ExprArg, len(cmd.ArgsWithInfo)-1)
+		for i, arg := range cmd.ArgsWithInfo[1:] {
+			exprArgs[i] = ExprArg{Value: arg.Value, Quoted: arg.Quoted}
+		}
+	} else {
+		// Fallback to Args without quoting info (for backward compatibility with tests)
+		exprArgs = make([]ExprArg, len(cmd.Args)-1)
+		for i, arg := range cmd.Args[1:] {
+			exprArgs[i] = ExprArg{Value: arg, Quoted: false}
+		}
+	}
+
+	// Parse the search expression with quoting information
+	expr, err := ParseSearchExpressionWithQuoting(exprArgs)
 	if err != nil {
 		execCtx.WriteErrorln("search: invalid expression: %v", err)
 		return 1, nil
@@ -106,6 +128,10 @@ func searchDirectoryWithExpr(dir string, expr SearchExpr, opts searchOptions, ex
 	// Read directory entries
 	entries, err := os.ReadDir(dir)
 	if err != nil {
+		// Silently skip permission errors (common on Windows for system folders)
+		if os.IsPermission(err) {
+			return nil
+		}
 		return err
 	}
 
@@ -113,16 +139,41 @@ func searchDirectoryWithExpr(dir string, expr SearchExpr, opts searchOptions, ex
 		name := entry.Name()
 		fullPath := filepath.Join(dir, name)
 
-		// Evaluate the expression against the filename
-		if expr.Evaluate(name) {
+		// Get file info for type predicates
+		info, infoErr := entry.Info()
+		if infoErr != nil {
+			execCtx.WriteErrorln("search: %s: %v", fullPath, infoErr)
+			continue
+		}
+
+		// Build FileInfo struct for expression evaluation
+		fileInfo := &FileInfo{
+			Name:   name,
+			Mode:   info.Mode(),
+			IsDir:  entry.IsDir(),
+			IsLink: info.Mode()&os.ModeSymlink != 0,
+		}
+
+		// If it's a symlink, try to get the target
+		if fileInfo.IsLink {
+			if target, err := os.Readlink(fullPath); err == nil {
+				fileInfo.LinkTarget = target
+			}
+		}
+
+		// Evaluate the expression against the file info
+		if expr.Evaluate(fileInfo) {
 			*found = true
-			// Colorize output based on type
+			// Determine display path
 			displayPath := fullPath
-			if execCtx.Colors != nil {
-				info, infoErr := entry.Info()
-				if infoErr == nil {
-					displayPath = colorizeSearchResult(fullPath, info.Mode(), execCtx)
+			if opts.absolute {
+				if absPath, err := filepath.Abs(fullPath); err == nil {
+					displayPath = absPath
 				}
+			}
+			// Colorize output based on type
+			if execCtx.Colors != nil {
+				displayPath = colorizeSearchResult(displayPath, info.Mode(), execCtx)
 			}
 			fmt.Fprintln(execCtx.Stdout, displayPath)
 		}
@@ -135,8 +186,10 @@ func searchDirectoryWithExpr(dir string, expr SearchExpr, opts searchOptions, ex
 			}
 			// Recurse
 			if err := searchDirectoryWithExpr(fullPath, expr, opts, execCtx, currentLevel+1, found); err != nil {
-				// Report error but continue with other directories
-				execCtx.WriteErrorln("search: %s: %v", fullPath, err)
+				// Silently skip permission errors, report other errors
+				if !os.IsPermission(err) {
+					execCtx.WriteErrorln("search: %s: %v", fullPath, err)
+				}
 			}
 		}
 	}
@@ -180,11 +233,12 @@ Usage: search <directory> <expression> [options]
 
 Arguments:
   directory     The directory to search in
-  expression    Pattern(s) with optional logical operators
+  expression    Pattern(s) with optional logical operators and type predicates
 
 Options:
   -r, --recursive      Search recursively in subdirectories
   -l, --level=<n>      Maximum depth level (0 = unlimited, default)
+  -a, --absolute       Display absolute paths
       --help           Show this help message
 
 Pattern syntax:
@@ -192,6 +246,14 @@ Pattern syntax:
   ?             Matches any single character
   [abc]         Matches any character in the brackets
   [a-z]         Matches any character in the range
+
+Type predicates (case-insensitive):
+  isFile        Match regular files only
+  isDir         Match directories only
+  isLink        Match symbolic links
+  isSymlink     Match symbolic links (alias for isLink)
+  isHardlink    Match regular files (hard links cannot be detected)
+  isExec        Match executable files
 
 Logical operators (case-insensitive):
   AND, &&       Both patterns must match
@@ -206,9 +268,30 @@ Operator precedence (highest to lowest):
   3. XOR
   4. OR
 
+Quoting:
+  Quoted arguments ("..." or '...') are always treated as patterns,
+  never as operators or predicates. Use this to search for files
+  named AND, OR, isFile, etc.
+
 Simple examples (backward compatible):
   search . "*.go"                    Find Go files in current directory
   search . "*.go" "*.md" -r          Find Go OR Markdown files recursively
+
+Type predicate examples:
+  search . "*.go" AND isFile -r
+      Find Go files only (exclude directories named *.go)
+
+  search . isDir -r
+      Find all directories
+
+  search . isExec -r
+      Find all executable files
+
+  search . "*config*" AND isFile -r
+      Find files with "config" in the name
+
+  search . isLink -r
+      Find all symbolic links
 
 Logical expression examples:
   search . "*.go" AND NOT "*_test.go" -r
@@ -226,11 +309,13 @@ Logical expression examples:
   search . NOT "*.log" -r
       Find all files except .log files
 
-  search . "(" "*.go" OR "*.md" ")" AND NOT "*_test*" -r
+  search . "(" "*.go" OR "*.md" ")" AND NOT "*_test*" AND isFile -r
       Find Go or Markdown files, excluding test files
 
-  search . "*.txt" AND "(" "test*" OR "spec*" ")" -r
-      Find .txt files starting with test or spec
+Quoting examples (for files named like operators/predicates):
+  search . "AND"                     Find a file named 'AND'
+  search . "isFile"                  Find a file named 'isFile'
+  search . "OR" "NOT"                Find files named 'OR' or 'NOT'
 
 Note: When using parentheses, they must be separate arguments or quoted.
       Shell may require escaping: \( \) or '(' ')'

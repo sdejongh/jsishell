@@ -413,14 +413,18 @@ func TestTokenIsWhitespace(t *testing.T) {
 	}
 }
 
-func TestLexerEscapesInWord(t *testing.T) {
+func TestLexerBackslashInWord(t *testing.T) {
+	// In unquoted words, backslash is NOT an escape character.
+	// All backslashes are preserved literally (for Windows paths).
+	// For filenames with spaces, use quotes: "file name"
 	tests := []struct {
 		input   string
 		literal string
 	}{
-		{`hello\ world`, "hello world"},
-		{`path\\file`, "path\\file"},
-		{`a\tb`, "a\tb"},
+		{`path\\file`, `path\\file`},          // Double backslash preserved
+		{`a\tb`, `a\tb`},                      // \t preserved (not tab)
+		{`C:\Users\test`, `C:\Users\test`},    // Windows path preserved
+		{`d:\pictures\`, `d:\pictures\`},      // Windows path with trailing backslash
 	}
 
 	for _, tt := range tests {

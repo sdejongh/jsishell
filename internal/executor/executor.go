@@ -127,6 +127,18 @@ func (e *Executor) Execute(ctx context.Context, cmd *parser.Command) (int, error
 		return 0, nil // Empty command
 	}
 
+	// Handle Windows drive letters (e.g., "c:", "D:") as "cd <drive>:"
+	if isWindowsDriveLetter(cmd.Name) {
+		// Transform into a cd command
+		cdCmd := parser.NewCommand()
+		cdCmd.Name = "cd"
+		cdCmd.Resolved = "cd"
+		cdCmd.Args = []string{cmd.Name}
+		cdCmd.ArgsWithInfo = []parser.Arg{{Value: cmd.Name, Quoted: false}}
+		cdCmd.RawInput = cmd.RawInput
+		cmd = cdCmd
+	}
+
 	// Resolve command name (handle abbreviations)
 	resolved, alternatives, err := e.ResolveCommand(cmd.Name)
 	if err != nil {
