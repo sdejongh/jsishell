@@ -104,4 +104,44 @@ func TestRelativePathCompletion(t *testing.T) {
 			t.Errorf("Complete(\"../int\") returned %q, want \"../internal/\"", candidates[0].Text)
 		}
 	})
+
+	t.Run("../ alone lists parent directory", func(t *testing.T) {
+		// Create subdirectory and test ../ completion
+		subDir := filepath.Join(tmpDir, "subdir2")
+		os.MkdirAll(subDir, 0755)
+		os.Chdir(subDir)
+		defer os.Chdir(tmpDir)
+
+		candidates := c.Complete("../")
+		// Should list contents of parent (tmpDir): internal/, images/, index.txt, subdir/, subdir2/
+		if len(candidates) < 3 {
+			t.Errorf("Complete(\"../\") returned %d candidates, want at least 3", len(candidates))
+		}
+		// Check that results have ../ prefix
+		for _, cand := range candidates {
+			if cand.Text[:3] != "../" {
+				t.Errorf("Complete(\"../\") candidate %q should start with \"../\"", cand.Text)
+			}
+		}
+	})
+
+	t.Run(".. alone lists parent directory", func(t *testing.T) {
+		// Create subdirectory and test .. completion
+		subDir := filepath.Join(tmpDir, "subdir3")
+		os.MkdirAll(subDir, 0755)
+		os.Chdir(subDir)
+		defer os.Chdir(tmpDir)
+
+		candidates := c.Complete("..")
+		// Should list contents of parent (tmpDir)
+		if len(candidates) < 3 {
+			t.Errorf("Complete(\"..\") returned %d candidates, want at least 3", len(candidates))
+		}
+		// Check that results have ../ prefix
+		for _, cand := range candidates {
+			if cand.Text[:3] != "../" {
+				t.Errorf("Complete(\"..\") candidate %q should start with \"../\"", cand.Text)
+			}
+		}
+	})
 }

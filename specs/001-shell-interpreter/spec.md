@@ -412,6 +412,41 @@ As a user, I want to access and search my command history so that I can quickly 
   - Different colors for TypeCommand, TypeDirectory, TypeFile, TypeExecutable
   - After display, cursor returns to input line for continued editing
 
+### Session 2025-11-29 (v1.2.0 Features)
+
+#### Prompt Shell Indicator
+
+- Q: How to show user privilege level in prompt? → A: Added `%$` prompt variable that displays:
+  - `$` for regular users (uid != 0)
+  - `#` for root user (uid == 0)
+  - Default prompt now uses `%$` instead of literal `$`
+
+#### Exclude Option for File Commands
+
+- Q: How to support repeated options like `--exclude`? → A:
+  - Added `MultiOptions map[string][]string` to Command struct
+  - Added `GetOptions(names ...string) []string` method
+  - Parser populates both `Options` (last value) and `MultiOptions` (all values)
+
+- Q: Which commands support `--exclude`? → A: `ls`, `cp`, and `rm`
+  - Uses `filepath.Match()` for glob pattern matching
+  - Pattern matched against base filename only
+  - `rm -r` with exclude: directories containing excluded files are not removed
+
+#### Tilde Expansion
+
+- Q: Was tilde expanded for external commands? → A: No, fixed in parser.go
+  - Added `expandTilde()` function in parser
+  - Now `vim ~/.config/file` works correctly with external programs
+  - Expands `~` to home directory, `~/path` to home + path
+
+#### Path Autocompletion
+
+- Q: How to handle `../` path completion? → A:
+  - Added `..` and `../` detection in `isPathLike()`
+  - Added `hasExplicitDotDot` tracking for prefix preservation
+  - Fixed double slash issue when completing `../` alone
+
 ## Assumptions
 
 - Users have basic familiarity with command-line interfaces
@@ -452,11 +487,12 @@ As a user, I want to access and search my command history so that I can quickly 
 | `env` | Show/set environment variables | `--help` |
 | `cd` | Change directory | `--help` |
 | `pwd` | Print working directory | `--help` |
-| `ls` | List directory contents | `-a`, `-d`, `-l`, `-R`, `-v`, `-q`, `-s/--sort`, `--help` |
+| `ls` | List directory contents | `-a`, `-d`, `-l`, `-R`, `-v`, `-q`, `-s/--sort`, `-e/--exclude`, `--help` |
 | `mkdir` | Create directories | `-p`, `-v`, `--help` |
-| `cp` | Copy files/directories | `-r`, `-f`, `-v`, `--help` |
+| `cp` | Copy files/directories | `-r`, `-f`, `-v`, `-e/--exclude`, `--help` |
 | `mv` | Move/rename files | `-f`, `-v`, `--help` |
-| `rm` | Delete files/directories | `-r`, `-f`, `-y`, `-q`, `-v`, `--help` |
+| `rm` | Delete files/directories | `-r`, `-f`, `-y`, `-q`, `-v`, `-e/--exclude`, `--help` |
+| `init` | Generate default config | `--help` |
 | `reload` | Reload configuration | `--help` |
 | `history` | Show/clear command history | `-c`, `--help` |
 
@@ -470,12 +506,20 @@ The `ls` command supports extensive options:
 - `-v, --verbose` - Verbose mode (implies -l, adds file type indicator)
 - `-q, --quiet` - Only show file names
 - `-s, --sort=<spec>` - Sort specification (name, size, time, dir; prefix with ! to reverse)
+- `-e, --exclude=<glob>` - Exclude files matching glob pattern (can be repeated)
 
 Sort examples:
 - `--sort=name` - Sort by name (default)
 - `--sort=!time` - Sort by modification time, newest first
 - `--sort=dir,name` - Directories first, then by name
 - `--sort=!size,name` - By size descending, then by name
+
+### Exclude Pattern Support (ls, cp, rm)
+
+The `--exclude` option uses standard glob patterns and can be repeated:
+- `ls -e=*.log` - List files excluding .log files
+- `cp -r -e=*.tmp -e=*.bak src/ dest/` - Copy excluding .tmp and .bak files
+- `rm -r --exclude=*.txt dir/` - Remove directory keeping .txt files
 
 ### Performance Results
 

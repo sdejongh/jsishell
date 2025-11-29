@@ -153,13 +153,14 @@ func (c *Completer) CompletePath(pathPrefix string) []CompletionCandidate {
 	dir := filepath.Dir(pathPrefix)
 	base := filepath.Base(pathPrefix)
 
-	// Handle "./" prefix - filepath.Dir("./foo") returns ".", filepath.Base returns "foo"
-	// We need to preserve the "./" prefix in results
-	hasExplicitDot := strings.HasPrefix(originalPrefix, "./") || (strings.HasPrefix(originalPrefix, ".") && !hasTildePrefix)
+	// Handle "./" and "../" prefixes - filepath.Dir("./foo") returns ".", filepath.Base returns "foo"
+	// We need to preserve these prefixes in results
+	hasExplicitDot := strings.HasPrefix(originalPrefix, "./") || originalPrefix == "."
+	hasExplicitDotDot := strings.HasPrefix(originalPrefix, "../") || originalPrefix == ".."
 
-	// If path ends with separator, we're listing a directory
-	if strings.HasSuffix(pathPrefix, string(os.PathSeparator)) || pathPrefix == "." {
-		dir = pathPrefix
+	// If path ends with separator or is "." or "..", we're listing a directory
+	if strings.HasSuffix(pathPrefix, string(os.PathSeparator)) || pathPrefix == "." || pathPrefix == ".." {
+		dir = strings.TrimSuffix(pathPrefix, string(os.PathSeparator))
 		base = ""
 	}
 
@@ -211,6 +212,9 @@ func (c *Completer) CompletePath(pathPrefix string) []CompletionCandidate {
 		} else if dir == "." && hasExplicitDot {
 			// For "./" prefix, preserve it in the result
 			completionText = "./" + name
+		} else if (dir == ".." || strings.HasPrefix(dir, "../")) && hasExplicitDotDot {
+			// For "../" prefix, preserve it in the result
+			completionText = dir + "/" + name
 		} else if hasTildePrefix && homeDir != "" {
 			// For ~ prefix, reconstruct with ~ instead of absolute home path
 			fullPath := filepath.Join(dir, name)

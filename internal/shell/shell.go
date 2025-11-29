@@ -125,6 +125,10 @@ func New(opts ...Option) *Shell {
 	}
 	s.config = cfg
 
+	// Setup color scheme for prompt expander
+	colorScheme := terminal.NewColorScheme(&cfg.Colors)
+	s.promptExpander.SetColorScheme(colorScheme)
+
 	// Apply configuration (sets prompt from config)
 	s.applyConfig()
 
@@ -405,6 +409,19 @@ func (s *Shell) onConfigReload(cfg *config.Config) {
 	s.config = cfg
 	s.applyConfig()
 
+	// Update color scheme
+	var colorScheme *terminal.ColorScheme
+	if cfg != nil {
+		colorScheme = terminal.NewColorScheme(&cfg.Colors)
+	} else {
+		colorScheme = terminal.NewColorScheme(nil)
+	}
+
+	// Update prompt expander color scheme
+	if s.promptExpander != nil {
+		s.promptExpander.SetColorScheme(colorScheme)
+	}
+
 	// Update line editor prompt if interactive
 	if s.lineEditor != nil {
 		s.lineEditor.SetPrompt(s.expandedPrompt())
@@ -412,13 +429,6 @@ func (s *Shell) onConfigReload(cfg *config.Config) {
 
 	// Update executor settings
 	if s.executor != nil {
-		// Update color scheme
-		var colorScheme *terminal.ColorScheme
-		if cfg != nil {
-			colorScheme = terminal.NewColorScheme(&cfg.Colors)
-		} else {
-			colorScheme = terminal.NewColorScheme(nil)
-		}
 		s.executor.SetColors(colorScheme)
 
 		// Update abbreviations setting

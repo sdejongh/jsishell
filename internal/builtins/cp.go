@@ -21,9 +21,18 @@ func CpDefinition() Definition {
 			{Long: "--recursive", Short: "-r", Description: "Copy directories recursively"},
 			{Long: "--verbose", Short: "-v", Description: "Print file names as they are copied"},
 			{Long: "--force", Short: "-f", Description: "Overwrite existing files without prompting"},
+			{Long: "--exclude", Short: "-e", HasValue: true, Description: "Exclude files matching glob pattern (can be repeated)"},
 			{Long: "--help", Description: "Show help message"},
 		},
 	}
+}
+
+// cpOptions holds the options for the cp command.
+type cpOptions struct {
+	recursive       bool
+	verbose         bool
+	force           bool
+	excludePatterns []string
 }
 
 func cpHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int, error) {
@@ -38,9 +47,12 @@ func cpHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int,
 		return 1, nil
 	}
 
-	recursive := cmd.HasFlag("-r", "--recursive")
-	verbose := cmd.HasFlag("-v", "--verbose")
-	force := cmd.HasFlag("-f", "--force")
+	opts := cpOptions{
+		recursive:       cmd.HasFlag("-r", "--recursive"),
+		verbose:         cmd.HasFlag("-v", "--verbose"),
+		force:           cmd.HasFlag("-f", "--force"),
+		excludePatterns: cmd.GetOptions("-e", "--exclude"),
+	}
 
 	// Last argument is destination
 	dest := cmd.Args[len(cmd.Args)-1]
@@ -59,6 +71,11 @@ func cpHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int,
 	exitCode := 0
 
 	for _, src := range sources {
+		// Check if source matches exclude pattern
+		if matchesCpExcludePattern(filepath.Base(src), opts.excludePatterns) {
+			continue
+		}
+
 		srcInfo, err := os.Stat(src)
 		if err != nil {
 			execCtx.WriteErrorln("cp: cannot stat '%s': %v", src, err)
@@ -74,17 +91,17 @@ func cpHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int,
 
 		// Check if source is a directory
 		if srcInfo.IsDir() {
-			if !recursive {
+			if !opts.recursive {
 				execCtx.WriteErrorln("cp: omitting directory '%s'", src)
 				exitCode = 1
 				continue
 			}
-			if err := cpDir(src, actualDest, verbose, force, execCtx); err != nil {
+			if err := cpDir(src, actualDest, opts, execCtx); err != nil {
 				execCtx.WriteErrorln("cp: error copying '%s': %v", src, err)
 				exitCode = 1
 			}
 		} else {
-			if err := cpFile(src, actualDest, verbose, force, execCtx); err != nil {
+			if err := cpFile(src, actualDest, opts, execCtx); err != nil {
 				execCtx.WriteErrorln("cp: error copying '%s': %v", src, err)
 				exitCode = 1
 			}
@@ -94,10 +111,20 @@ func cpHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int,
 	return exitCode, nil
 }
 
-func cpFile(src, dest string, verbose, force bool, execCtx *Context) error {
+// matchesCpExcludePattern checks if a name matches any of the exclude patterns.
+func matchesCpExcludePattern(name string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if matched, _ := filepath.Match(pattern, name); matched {
+			return true
+		}
+	}
+	return false
+}
+
+func cpFile(src, dest string, opts cpOptions, execCtx *Context) error {
 	// Check if destination exists
 	if _, err := os.Stat(dest); err == nil {
-		if !force {
+		if !opts.force {
 			execCtx.WriteErrorln("cp: '%s' already exists", dest)
 			return nil
 		}
@@ -124,14 +151,14 @@ func cpFile(src, dest string, verbose, force bool, execCtx *Context) error {
 		return err
 	}
 
-	if verbose {
+	if opts.verbose {
 		fmt.Fprintf(execCtx.Stdout, "'%s' -> '%s'\n", src, dest)
 	}
 
 	return nil
 }
 
-func cpDir(src, dest string, verbose, force bool, execCtx *Context) error {
+func cpDir(src, dest string, opts cpOptions, execCtx *Context) error {
 	srcInfo, err := os.Stat(src)
 	if err != nil {
 		return err
@@ -142,7 +169,7 @@ func cpDir(src, dest string, verbose, force bool, execCtx *Context) error {
 		return err
 	}
 
-	if verbose {
+	if opts.verbose {
 		fmt.Fprintf(execCtx.Stdout, "'%s' -> '%s'\n", src, dest)
 	}
 
@@ -153,15 +180,22 @@ func cpDir(src, dest string, verbose, force bool, execCtx *Context) error {
 	}
 
 	for _, entry := range entries {
-		srcPath := filepath.Join(src, entry.Name())
-		destPath := filepath.Join(dest, entry.Name())
+		name := entry.Name()
+
+		// Check if entry matches exclude pattern
+		if matchesCpExcludePattern(name, opts.excludePatterns) {
+			continue
+		}
+
+		srcPath := filepath.Join(src, name)
+		destPath := filepath.Join(dest, name)
 
 		if entry.IsDir() {
-			if err := cpDir(srcPath, destPath, verbose, force, execCtx); err != nil {
+			if err := cpDir(srcPath, destPath, opts, execCtx); err != nil {
 				return err
 			}
 		} else {
-			if err := cpFile(srcPath, destPath, verbose, force, execCtx); err != nil {
+			if err := cpFile(srcPath, destPath, opts, execCtx); err != nil {
 				return err
 			}
 		}
@@ -176,16 +210,23 @@ func showCpHelp(execCtx *Context) {
 Usage: cp [options] source... destination
 
 Options:
-  -r, --recursive   Copy directories recursively
-  -v, --verbose     Print file names as they are copied
-  -f, --force       Overwrite existing files without prompting
-      --help        Show this help message
+  -r, --recursive        Copy directories recursively
+  -v, --verbose          Print file names as they are copied
+  -f, --force            Overwrite existing files without prompting
+  -e, --exclude=<glob>   Exclude files matching glob pattern (can be repeated)
+      --help             Show this help message
+
+Exclude patterns:
+  Standard glob patterns: *, ?, [abc], [a-z]
+  Can be specified multiple times to exclude several patterns.
 
 Examples:
-  cp file.txt backup.txt         Copy a file
-  cp file1.txt file2.txt dir/    Copy files to directory
-  cp -r source/ dest/            Copy directory recursively
-  cp -vf src.txt dst.txt         Copy with verbose, force overwrite
+  cp file.txt backup.txt             Copy a file
+  cp file1.txt file2.txt dir/        Copy files to directory
+  cp -r source/ dest/                Copy directory recursively
+  cp -vf src.txt dst.txt             Copy with verbose, force overwrite
+  cp -r --exclude=*.log src/ dest/   Copy excluding log files
+  cp -r -e=*.tmp -e=*.bak src/ dst/  Copy excluding .tmp and .bak files
 `
 	execCtx.Stdout.Write([]byte(help))
 }

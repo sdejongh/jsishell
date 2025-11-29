@@ -30,6 +30,7 @@ func LsDefinition() Definition {
 			{Long: "--verbose", Short: "-v", Description: "Show detailed information about each entry"},
 			{Long: "--quiet", Short: "-q", Description: "Only show file names, suppress other output"},
 			{Long: "--sort", Short: "-s", HasValue: true, Description: "Sort by: name, size, time, dir (comma-separated, prefix with - to reverse)"},
+			{Long: "--exclude", Short: "-e", HasValue: true, Description: "Exclude files matching glob pattern (can be used multiple times)"},
 			{Long: "--help", Description: "Show help message"},
 		},
 	}
@@ -50,6 +51,7 @@ type lsOptions struct {
 	verbose         bool
 	quiet           bool
 	sortBy          []sortCriterion // sort criteria in order of priority
+	excludePatterns []string        // glob patterns to exclude
 }
 
 func lsHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int, error) {
@@ -78,6 +80,9 @@ func lsHandler(ctx context.Context, cmd *parser.Command, execCtx *Context) (int,
 		}
 		opts.sortBy = criteria
 	}
+
+	// Parse --exclude options (can be used multiple times)
+	opts.excludePatterns = cmd.GetOptions("-e", "--exclude")
 
 	// --verbose implies --long
 	if opts.verbose {
@@ -280,6 +285,16 @@ func compareEntries(a, b *lsEntryInfo, field string) int {
 	}
 }
 
+// matchesExcludePattern checks if a name matches any of the exclude patterns.
+func matchesExcludePattern(name string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if matched, _ := filepath.Match(pattern, name); matched {
+			return true
+		}
+	}
+	return false
+}
+
 func lsPath(path string, opts lsOptions, execCtx *Context) error {
 	return lsPathInternal(path, opts, execCtx, false)
 }
@@ -322,6 +337,11 @@ func lsPathInternal(path string, opts lsOptions, execCtx *Context, isRecursiveCa
 		name := entry.Name()
 		// Skip hidden files unless -a
 		if !opts.showAll && strings.HasPrefix(name, ".") {
+			continue
+		}
+
+		// Check exclude patterns
+		if matchesExcludePattern(name, opts.excludePatterns) {
 			continue
 		}
 
@@ -553,14 +573,15 @@ func showLsHelp(execCtx *Context) {
 Usage: ls [options] [path...]
 
 Options:
-  -a, --all          Include hidden files (starting with .)
-  -d, --directory    List directories only
-  -l, --long         Use long listing format
-  -R, --recursive    List subdirectories recursively
-  -v, --verbose      Show detailed information (implies --long, adds file type)
-  -q, --quiet        Only show file names, suppress other output
-  -s, --sort <spec>  Sort entries (see below)
-      --help         Show this help message
+  -a, --all              Include hidden files (starting with .)
+  -d, --directory        List directories only
+  -l, --long             Use long listing format
+  -R, --recursive        List subdirectories recursively
+  -v, --verbose          Show detailed information (implies --long, adds file type)
+  -q, --quiet            Only show file names, suppress other output
+  -s, --sort=<spec>      Sort entries (see below)
+  -e, --exclude=<glob>   Exclude files matching glob pattern (can be repeated)
+      --help             Show this help message
 
 Sort specification:
   Comma-separated list of fields. Prefix with ! to reverse order.
@@ -577,22 +598,28 @@ Sort specification:
     --sort=dir,name   Directories first, then sort by name
     --sort=!size,name Sort by size descending, then by name for equal sizes
 
+Exclude patterns:
+  Standard glob patterns: *, ?, [abc], [a-z]
+  Can be specified multiple times to exclude several patterns.
+
 Long format shows: permissions, owner, group, size, date, name
 Verbose format adds: file type indicator ([dir], [file], [exe], [lnk])
 
 Examples:
-  ls                     List current directory
-  ls -a                  List including hidden files
-  ls -d                  List directories only
-  ls -l                  Long format listing
-  ls -R                  List recursively
-  ls -lR                 Long format, recursive
-  ls -l --sort=!time     Long format, newest first
-  ls --sort=dir,!size    Directories first, then by size descending
-  ls -v                  Verbose listing with file types
-  ls -q                  Quiet mode, names only
-  ls /home               List /home directory
-  ls dir1 dir2           List multiple directories
+  ls                           List current directory
+  ls -a                        List including hidden files
+  ls -d                        List directories only
+  ls -l                        Long format listing
+  ls -R                        List recursively
+  ls -lR                       Long format, recursive
+  ls -l --sort=!time           Long format, newest first
+  ls --sort=dir,!size          Directories first, then by size descending
+  ls -v                        Verbose listing with file types
+  ls -q                        Quiet mode, names only
+  ls --exclude=*.log           Exclude log files
+  ls --exclude=*.tmp -e=*.bak  Exclude .tmp and .bak files
+  ls /home                     List /home directory
+  ls dir1 dir2                 List multiple directories
 `
 	execCtx.Stdout.Write([]byte(help))
 }

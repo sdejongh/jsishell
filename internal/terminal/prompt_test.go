@@ -283,3 +283,128 @@ func TestPromptExpanderMultipleVariables(t *testing.T) {
 		t.Errorf("Should end with 'test', got %q", got)
 	}
 }
+
+func TestPromptExpanderColors(t *testing.T) {
+	p := NewPromptExpander()
+	p.SetWorkDir("/home/testuser")
+
+	tests := []struct {
+		name   string
+		format string
+		want   string
+	}{
+		{
+			name:   "simple color",
+			format: "%{green}test%{/}",
+			want:   "\033[32mtest\033[0m",
+		},
+		{
+			name:   "reset keyword",
+			format: "%{red}error%{reset}",
+			want:   "\033[31merror\033[0m",
+		},
+		{
+			name:   "bright color",
+			format: "%{bright_blue}info%{/}",
+			want:   "\033[94minfo\033[0m",
+		},
+		{
+			name:   "bold style",
+			format: "%{bold}important%{/}",
+			want:   "\033[1mimportant\033[0m",
+		},
+		{
+			name:   "dim style",
+			format: "%{dim}faded%{/}",
+			want:   "\033[2mfaded\033[0m",
+		},
+		{
+			name:   "underline style",
+			format: "%{underline}link%{/}",
+			want:   "\033[4mlink\033[0m",
+		},
+		{
+			name:   "color with variable",
+			format: "%{cyan}%D%{/}",
+			want:   "\033[36mtestuser\033[0m",
+		},
+		{
+			name:   "multiple colors",
+			format: "%{green}user%{/}@%{blue}host%{/}",
+			want:   "\033[32muser\033[0m@\033[34mhost\033[0m",
+		},
+		{
+			name:   "unknown color ignored",
+			format: "%{unknowncolor}text%{/}",
+			want:   "text\033[0m",
+		},
+		{
+			name:   "realistic prompt",
+			format: "%{green}%u%{/}@%{cyan}%h%{/}:%{blue}%D%{/}$ ",
+			want:   "", // We'll check it contains color codes
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := p.Expand(tt.format)
+			if tt.want != "" && got != tt.want {
+				t.Errorf("Expand(%q) = %q, want %q", tt.format, got, tt.want)
+			}
+			if tt.name == "realistic prompt" {
+				// Just verify it contains ANSI codes and ends with "$ "
+				if !strings.Contains(got, "\033[") {
+					t.Errorf("Realistic prompt should contain ANSI codes, got %q", got)
+				}
+				if !strings.HasSuffix(got, "$ ") {
+					t.Errorf("Realistic prompt should end with '$ ', got %q", got)
+				}
+			}
+		})
+	}
+}
+
+func TestPromptExpanderColorsDisabled(t *testing.T) {
+	p := NewPromptExpander()
+	p.SetColorsActive(false)
+
+	format := "%{green}text%{/}"
+	got := p.Expand(format)
+	want := "text" // No color codes when disabled
+
+	if got != want {
+		t.Errorf("With colors disabled, Expand(%q) = %q, want %q", format, got, want)
+	}
+}
+
+func TestPromptExpanderShellIndicator(t *testing.T) {
+	p := NewPromptExpander()
+
+	// Test the shell indicator variable
+	got := p.Expand("%$")
+
+	// For non-root users, should be $
+	// For root, should be #
+	if os.Getuid() == 0 {
+		if got != "#" {
+			t.Errorf("Shell indicator for root should be #, got %q", got)
+		}
+	} else {
+		if got != "$" {
+			t.Errorf("Shell indicator for user should be $, got %q", got)
+		}
+	}
+
+	// Test in a prompt context
+	format := "%u@%h %$ "
+	got = p.Expand(format)
+	if os.Getuid() == 0 {
+		if !strings.HasSuffix(got, "# ") {
+			t.Errorf("Prompt should end with '# ', got %q", got)
+		}
+	} else {
+		if !strings.HasSuffix(got, "$ ") {
+			t.Errorf("Prompt should end with '$ ', got %q", got)
+		}
+	}
+}

@@ -23,6 +23,7 @@ func RegisterAll(r *Registry) {
 
 	// Configuration commands
 	r.Register(ReloadDefinition())
+	r.Register(InitDefinition())
 
 	// History commands
 	r.Register(HistoryDefinition())

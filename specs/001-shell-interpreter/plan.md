@@ -21,7 +21,7 @@ JSIShell is a cross-platform interactive command line interpreter in Go with sta
 **Project Type**: Single CLI application
 **Performance Goals**: <100ms startup, <10ms input latency, <100ms autocompletion
 **Constraints**: No external runtime dependencies, <10MB binary size, minimal memory footprint
-**Scale/Scope**: Single-user interactive shell, 1000+ history entries, 14 built-in commands
+**Scale/Scope**: Single-user interactive shell, 1000+ history entries, 15 built-in commands
 
 ## Constitution Check
 
@@ -80,11 +80,12 @@ internal/
 │   ├── registry.go      # Command registry + Context type
 │   ├── cd.go            # cd command (change directory)
 │   ├── pwd.go           # pwd command (print working directory)
-│   ├── ls.go            # ls command with extensive options
-│   ├── cp.go            # cp command (copy)
+│   ├── ls.go            # ls command with extensive options + exclude
+│   ├── cp.go            # cp command (copy) + exclude
 │   ├── mv.go            # mv command (move)
-│   ├── rm.go            # rm command (remove)
+│   ├── rm.go            # rm command (remove) + exclude
 │   ├── mkdir.go         # mkdir command
+│   ├── init.go          # init command (generate default config)
 │   ├── exit.go          # exit command
 │   ├── help.go          # help command
 │   ├── clear.go         # clear command
@@ -214,3 +215,67 @@ tests/
 2. **Temporary Directory for Tests**: Path completion tests use `t.TempDir()` and `os.Chdir()` to create controlled test environments.
 
 3. **Rebuild Required**: After code changes, always rebuild binary: `go build -o jsishell ./cmd/jsishell`
+
+### v1.2.0 Features
+
+#### Prompt Shell Indicator (`%$`)
+
+1. **Implementation**: Added `%$` variable in `internal/terminal/prompt.go`:
+   ```go
+   func (p *PromptExpander) shellIndicator() string {
+       if os.Getuid() == 0 {
+           return "#"
+       }
+       return "$"
+   }
+   ```
+
+2. **Default Prompt Update**: Changed from literal `$` to `%$` in config.go and init.go to properly show root indicator.
+
+#### Multi-Value Option Parsing (`--exclude`)
+
+1. **Parser Enhancement**: Added `MultiOptions map[string][]string` to `Command` struct and `GetOptions()` method in `ast.go`.
+
+2. **Option Population**: Both `Options` (last value) and `MultiOptions` (all values) are populated during parsing.
+
+3. **Usage Pattern**:
+   ```go
+   opts.excludePatterns = cmd.GetOptions("-e", "--exclude")
+   ```
+
+#### Exclude Pattern Support
+
+1. **Glob Matching**: Uses `filepath.Match()` against base filename only.
+
+2. **rm -r with Exclude**: Custom `rmDirRecursive()` function that:
+   - Recursively processes directory contents
+   - Skips files matching exclude patterns
+   - Only removes directory if empty after filtering
+
+3. **cp with Exclude**: Filters entries during `cpDir()` recursive copy.
+
+#### Tilde Expansion Fix
+
+1. **Problem**: External commands like `vim ~/.config/file` received literal `~` instead of expanded path.
+
+2. **Solution**: Added `expandTilde()` in `parser.go` that:
+   - Checks if value starts with `~`
+   - Gets HOME from environment or `os.UserHomeDir()`
+   - Expands `~` alone or `~/path` format
+
+#### Path Autocompletion Fix (`../`)
+
+1. **Detection**: Added `..` and `../` to `isPathLike()` function.
+
+2. **Prefix Preservation**: Added `hasExplicitDotDot` variable to track when user typed `../`.
+
+3. **Double Slash Fix**: When `pathPrefix` is `..` or ends with `/`, use `strings.TrimSuffix()` to avoid `..//` results.
+
+#### init Command
+
+1. **Purpose**: Generate default configuration file at `~/.config/jsishell/config.yaml`.
+
+2. **Behavior**:
+   - Creates directory structure if needed
+   - Uses embedded default config template
+   - Will not overwrite existing config unless `--force` used

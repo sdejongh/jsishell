@@ -13,8 +13,10 @@ import (
 
 // Default configuration values.
 const (
-	// DefaultPrompt uses prompt variables: %D (dir basename), supports %u (user), %h (host), %~ (cwd with ~), etc.
-	DefaultPrompt      = "jsi:%D> "
+	// DefaultPrompt uses prompt variables with colors:
+	// %{color} starts a color, %{/} resets
+	// %u (user), %h (host), %D (dir basename), %~ (cwd with ~), etc.
+	DefaultPrompt      = "%{green}%u@%h%{/}:%{blue}%~%{/}%$ "
 	DefaultHistorySize = 1000
 	DefaultHistoryFile = ".jsishell_history"
 )

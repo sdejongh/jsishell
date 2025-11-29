@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/sdejongh/jsishell/internal/env"
@@ -95,6 +96,7 @@ func (p *Parser) parseOption(cmd *Command, tok lexer.Token) error {
 		key := optName[:idx]
 		value := optName[idx+1:]
 		cmd.Options[key] = value
+		cmd.MultiOptions[key] = append(cmd.MultiOptions[key], value)
 		p.advance()
 		return nil
 	}
@@ -104,6 +106,29 @@ func (p *Parser) parseOption(cmd *Command, tok lexer.Token) error {
 	// Check if this is a long option (--something)
 	if strings.HasPrefix(optName, "--") {
 		return p.parseLongOption(cmd, optName)
+	}
+
+	// Short option with value: check if next token is = or a value
+	p.skipWhitespace()
+	next := p.current()
+
+	if next.Type == lexer.TokenEquals {
+		// -e = value or -e=value
+		p.advance()
+		p.skipWhitespace()
+		valueTok := p.current()
+
+		if valueTok.Type == lexer.TokenWord || valueTok.Type == lexer.TokenString || valueTok.Type == lexer.TokenVariable {
+			value := p.expandValue(valueTok)
+			cmd.Options[optName] = value
+			cmd.MultiOptions[optName] = append(cmd.MultiOptions[optName], value)
+			p.advance()
+		} else {
+			// -e= with no value
+			cmd.Options[optName] = ""
+			cmd.MultiOptions[optName] = append(cmd.MultiOptions[optName], "")
+		}
+		return nil
 	}
 
 	// Short option(s): -a or -abc (combined)
@@ -136,11 +161,14 @@ func (p *Parser) parseLongOption(cmd *Command, optName string) error {
 		valueTok := p.current()
 
 		if valueTok.Type == lexer.TokenWord || valueTok.Type == lexer.TokenString || valueTok.Type == lexer.TokenVariable {
-			cmd.Options[optName] = p.expandValue(valueTok)
+			value := p.expandValue(valueTok)
+			cmd.Options[optName] = value
+			cmd.MultiOptions[optName] = append(cmd.MultiOptions[optName], value)
 			p.advance()
 		} else {
 			// --key= with no value
 			cmd.Options[optName] = ""
+			cmd.MultiOptions[optName] = append(cmd.MultiOptions[optName], "")
 		}
 		return nil
 	}
@@ -150,15 +178,60 @@ func (p *Parser) parseLongOption(cmd *Command, optName string) error {
 	return nil
 }
 
-// expandValue expands variables in a token value.
+// expandValue expands variables and tilde in a token value.
 func (p *Parser) expandValue(tok lexer.Token) string {
+	value := tok.Literal
+
 	if tok.Type == lexer.TokenVariable {
 		if p.env != nil {
 			return p.env.Get(tok.Literal)
 		}
 		return "" // No environment, return empty
 	}
-	return tok.Literal
+
+	// Expand tilde to home directory
+	value = p.expandTilde(value)
+
+	return value
+}
+
+// expandTilde expands ~ to the user's home directory.
+func (p *Parser) expandTilde(value string) string {
+	if len(value) == 0 {
+		return value
+	}
+
+	// Only expand ~ at the beginning
+	if value[0] != '~' {
+		return value
+	}
+
+	// Get home directory
+	home := ""
+	if p.env != nil {
+		home = p.env.Get("HOME")
+	}
+	if home == "" {
+		if h, err := os.UserHomeDir(); err == nil {
+			home = h
+		}
+	}
+	if home == "" {
+		return value // Can't expand, return as-is
+	}
+
+	// ~ alone
+	if len(value) == 1 {
+		return home
+	}
+
+	// ~/path
+	if value[1] == '/' {
+		return home + value[1:]
+	}
+
+	// ~username not supported, return as-is
+	return value
 }
 
 // current returns the current token.

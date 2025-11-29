@@ -3,20 +3,22 @@ package parser
 
 // Command represents a parsed shell command.
 type Command struct {
-	Name     string            // Command name (may be abbreviated)
-	Resolved string            // Resolved full command name (set by executor)
-	Args     []string          // Positional arguments
-	Options  map[string]string // Named options (--key=value or --key value)
-	Flags    map[string]bool   // Boolean flags (--verbose, -v)
-	RawInput string            // Original input string
+	Name         string              // Command name (may be abbreviated)
+	Resolved     string              // Resolved full command name (set by executor)
+	Args         []string            // Positional arguments
+	Options      map[string]string   // Named options (--key=value or --key value)
+	MultiOptions map[string][]string // Options that can be specified multiple times
+	Flags        map[string]bool     // Boolean flags (--verbose, -v)
+	RawInput     string              // Original input string
 }
 
 // NewCommand creates a new empty Command.
 func NewCommand() *Command {
 	return &Command{
-		Args:    make([]string, 0),
-		Options: make(map[string]string),
-		Flags:   make(map[string]bool),
+		Args:         make([]string, 0),
+		Options:      make(map[string]string),
+		MultiOptions: make(map[string][]string),
+		Flags:        make(map[string]bool),
 	}
 }
 
@@ -48,6 +50,18 @@ func (c *Command) GetOptionOr(defaultVal string, names ...string) string {
 		}
 	}
 	return defaultVal
+}
+
+// GetOptions returns all values for an option that can be specified multiple times.
+// Returns nil if the option was not specified.
+func (c *Command) GetOptions(names ...string) []string {
+	var result []string
+	for _, name := range names {
+		if vals, ok := c.MultiOptions[name]; ok {
+			result = append(result, vals...)
+		}
+	}
+	return result
 }
 
 // ArgCount returns the number of positional arguments.

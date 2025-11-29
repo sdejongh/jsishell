@@ -5,7 +5,34 @@
 
 # Shell prompt
 # The string displayed before each command input
-prompt: "$ "
+#
+# Supported variables:
+#   %d  - Current working directory (full path)
+#   %D  - Current working directory (basename only)
+#   %~  - Current working directory with ~ for home
+#   %u  - Username
+#   %h  - Hostname (short, without domain)
+#   %H  - Hostname (full, with domain)
+#   %t  - Time (HH:MM)
+#   %T  - Time with seconds (HH:MM:SS)
+#   %n  - Newline
+#   %$  - Shell indicator ($ for user, # for root)
+#   %%  - Literal %
+#
+# Color codes (use %{color} and %{reset} or %{/}):
+#   %{black}, %{red}, %{green}, %{yellow}, %{blue}, %{magenta}, %{cyan}, %{white}
+#   %{bright_black}, %{bright_red}, %{bright_green}, etc. (bright variants)
+#   %{bold}, %{dim}, %{underline} - text styles
+#   %{reset} or %{/} - reset all formatting
+#
+# Examples:
+#   prompt: "$ "                                    # Simple prompt
+#   prompt: "%{green}%u@%h%{/}:%{blue}%~%{/}%$ "    # Colored bash-style
+#   prompt: "[%t] %D> "                             # Time and directory
+#   prompt: "%{bold}%{cyan}%~%{/} λ "              # Bold cyan path with lambda
+#   prompt: "%{green}%u@%h%{/}:%{blue}%~%{/}%$ "  # Bash-style with root indicator
+#
+prompt: "%{green}%u@%h%{/}:%{blue}%~%{/}%$ "
 
 # History settings
 history:

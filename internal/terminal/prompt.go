@@ -11,8 +11,10 @@ import (
 
 // PromptExpander expands prompt variables to their values.
 type PromptExpander struct {
-	workDir string // Current working directory
-	homeDir string // User's home directory
+	workDir      string       // Current working directory
+	homeDir      string       // User's home directory
+	colorScheme  *ColorScheme // Color scheme for prompt colors
+	colorsActive bool         // Whether colors should be applied
 }
 
 // NewPromptExpander creates a new PromptExpander.
@@ -21,9 +23,20 @@ func NewPromptExpander() *PromptExpander {
 	workDir, _ := os.Getwd()
 
 	return &PromptExpander{
-		workDir: workDir,
-		homeDir: homeDir,
+		workDir:      workDir,
+		homeDir:      homeDir,
+		colorsActive: true,
 	}
+}
+
+// SetColorScheme sets the color scheme for prompt colors.
+func (p *PromptExpander) SetColorScheme(cs *ColorScheme) {
+	p.colorScheme = cs
+}
+
+// SetColorsActive enables or disables color output.
+func (p *PromptExpander) SetColorsActive(active bool) {
+	p.colorsActive = active
 }
 
 // SetWorkDir updates the current working directory.
@@ -43,7 +56,16 @@ func (p *PromptExpander) SetWorkDir(dir string) {
 //   - %t  - Time (HH:MM)
 //   - %T  - Time with seconds (HH:MM:SS)
 //   - %n  - Newline
+//   - %$  - Shell indicator ($ for user, # for root)
 //   - %%  - Literal %
+//
+// Color codes (use %{color} and %{reset} or %{/}):
+//   - %{black}, %{red}, %{green}, %{yellow}, %{blue}, %{magenta}, %{cyan}, %{white}
+//   - %{bright_black}, %{bright_red}, %{bright_green}, etc. (bright variants)
+//   - %{bold}, %{dim}, %{underline} - text styles
+//   - %{reset} or %{/} - reset all formatting
+//
+// Example: "%{green}%u@%h%{/}:%{blue}%~%{/}$ "
 func (p *PromptExpander) Expand(format string) string {
 	var result strings.Builder
 	result.Grow(len(format) * 2) // Pre-allocate some space
@@ -51,6 +73,17 @@ func (p *PromptExpander) Expand(format string) string {
 	i := 0
 	for i < len(format) {
 		if format[i] == '%' && i+1 < len(format) {
+			// Check for color code %{...}
+			if format[i+1] == '{' {
+				endIdx := strings.Index(format[i:], "}")
+				if endIdx != -1 {
+					colorName := format[i+2 : i+endIdx]
+					result.WriteString(p.getColorCode(colorName))
+					i += endIdx + 1
+					continue
+				}
+			}
+
 			switch format[i+1] {
 			case 'd': // Full working directory
 				result.WriteString(p.workDir)
@@ -79,6 +112,9 @@ func (p *PromptExpander) Expand(format string) string {
 			case 'n': // Newline
 				result.WriteByte('\n')
 				i += 2
+			case '$': // Shell indicator ($ for user, # for root)
+				result.WriteString(p.shellIndicator())
+				i += 2
 			case '%': // Literal %
 				result.WriteByte('%')
 				i += 2
@@ -94,6 +130,42 @@ func (p *PromptExpander) Expand(format string) string {
 	}
 
 	return result.String()
+}
+
+// getColorCode returns the ANSI escape code for the given color/style name.
+func (p *PromptExpander) getColorCode(name string) string {
+	// If colors are disabled, return empty string
+	if !p.colorsActive {
+		return ""
+	}
+
+	// Check if color scheme says colors are supported
+	if p.colorScheme != nil && !p.colorScheme.IsSupported() {
+		return ""
+	}
+
+	// Handle reset
+	if name == "reset" || name == "/" {
+		return ResetCode
+	}
+
+	// Handle styles
+	switch name {
+	case "bold":
+		return "\033[1m"
+	case "dim":
+		return "\033[2m"
+	case "underline":
+		return "\033[4m"
+	}
+
+	// Handle colors
+	if code := ColorCode(name); code != "" {
+		return code
+	}
+
+	// Unknown color/style, return empty
+	return ""
 }
 
 // shortPath returns the working directory with ~ substituted for home.
@@ -131,6 +203,14 @@ func (p *PromptExpander) fullHostname() string {
 		return hostname
 	}
 	return "localhost"
+}
+
+// shellIndicator returns $ for regular users and # for root.
+func (p *PromptExpander) shellIndicator() string {
+	if os.Getuid() == 0 {
+		return "#"
+	}
+	return "$"
 }
 
 // ExpandPrompt is a convenience function that expands a prompt string.
