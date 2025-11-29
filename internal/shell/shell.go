@@ -570,5 +570,11 @@ func (s *Shell) createCompleter() *completion.Completer {
 		defs = append(defs, cmdDef)
 	}
 
-	return completion.NewCompleterWithDefs(defs)
+	completer := completion.NewCompleterWithDefs(defs)
+
+	// Enable PATH executable completion
+	pathEnv := s.env.Get("PATH")
+	completer.EnablePathCompletion(pathEnv)
+
+	return completer
 }

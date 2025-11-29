@@ -279,3 +279,31 @@ tests/
    - Creates directory structure if needed
    - Uses embedded default config template
    - Will not overwrite existing config unless `--force` used
+
+### v1.2.1 Features
+
+#### PATH Executable Completion
+
+1. **Implementation**: Added `EnablePathCompletion()` method to `Completer` struct:
+   ```go
+   func (c *Completer) EnablePathCompletion(pathEnv string) {
+       c.pathExecutable = true
+       if pathEnv == "" {
+           pathEnv = os.Getenv("PATH")
+       }
+       c.pathDirs = filepath.SplitList(pathEnv)
+   }
+   ```
+
+2. **Execution Flow**:
+   - `completePathExecutables()` scans each PATH directory
+   - Filters by executable permission (mode & 0111)
+   - First occurrence wins (earlier PATH directories take priority)
+   - Results merged with builtin commands (builtins take priority)
+
+3. **Integration**: `shell.createCompleter()` calls `EnablePathCompletion()` with environment PATH.
+
+4. **Behavior**:
+   - Typing `vi` suggests `vim`, `view`, etc.
+   - Typing `pyt` suggests `python`, `python3`, etc.
+   - Builtins like `cd` are not shadowed by PATH executables

@@ -49,15 +49,19 @@ type CommandDef struct {
 
 // Completer provides command and path completion functionality.
 type Completer struct {
-	commands    []string              // Known command names (for backward compatibility)
-	commandDefs map[string]CommandDef // Command definitions with options
+	commands       []string              // Known command names (for backward compatibility)
+	commandDefs    map[string]CommandDef // Command definitions with options
+	pathExecutable bool                  // Whether to include PATH executables in completion
+	pathDirs       []string              // Directories from PATH environment variable
 }
 
 // NewCompleter creates a new Completer with the given command list.
 func NewCompleter(commands []string) *Completer {
 	return &Completer{
-		commands:    commands,
-		commandDefs: make(map[string]CommandDef),
+		commands:       commands,
+		commandDefs:    make(map[string]CommandDef),
+		pathExecutable: false,
+		pathDirs:       nil,
 	}
 }
 
@@ -72,8 +76,10 @@ func NewCompleterWithDefs(defs []CommandDef) *Completer {
 	}
 
 	return &Completer{
-		commands:    commands,
-		commandDefs: commandDefs,
+		commands:       commands,
+		commandDefs:    commandDefs,
+		pathExecutable: false,
+		pathDirs:       nil,
 	}
 }
 
@@ -93,17 +99,100 @@ func (c *Completer) SetCommandDefs(defs []CommandDef) {
 	}
 }
 
-// CompleteCommand returns completion candidates for a command name prefix.
-func (c *Completer) CompleteCommand(prefix string) []CompletionCandidate {
+// EnablePathCompletion enables completion of executables from PATH.
+func (c *Completer) EnablePathCompletion(pathEnv string) {
+	c.pathExecutable = true
+	if pathEnv == "" {
+		pathEnv = os.Getenv("PATH")
+	}
+	c.pathDirs = filepath.SplitList(pathEnv)
+}
+
+// DisablePathCompletion disables completion of executables from PATH.
+func (c *Completer) DisablePathCompletion() {
+	c.pathExecutable = false
+	c.pathDirs = nil
+}
+
+// completePathExecutables returns executables from PATH matching the prefix.
+func (c *Completer) completePathExecutables(prefix string) []CompletionCandidate {
+	if !c.pathExecutable || len(c.pathDirs) == 0 {
+		return nil
+	}
+
 	var candidates []CompletionCandidate
+	seen := make(map[string]bool)
 	lowerPrefix := strings.ToLower(prefix)
 
+	for _, dir := range c.pathDirs {
+		if dir == "" {
+			continue
+		}
+
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+
+			name := entry.Name()
+			// Skip if already seen (first occurrence in PATH wins)
+			if seen[name] {
+				continue
+			}
+
+			// Check prefix match
+			if !strings.HasPrefix(strings.ToLower(name), lowerPrefix) {
+				continue
+			}
+
+			// Check if executable
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+
+			if info.Mode()&0111 != 0 {
+				seen[name] = true
+				candidates = append(candidates, CompletionCandidate{
+					Text: name,
+					Type: TypeExecutable,
+				})
+			}
+		}
+	}
+
+	return candidates
+}
+
+// CompleteCommand returns completion candidates for a command name prefix.
+// This includes built-in commands and executables from PATH.
+func (c *Completer) CompleteCommand(prefix string) []CompletionCandidate {
+	var candidates []CompletionCandidate
+	seen := make(map[string]bool)
+	lowerPrefix := strings.ToLower(prefix)
+
+	// First, add built-in commands (they take priority)
 	for _, cmd := range c.commands {
 		if strings.HasPrefix(strings.ToLower(cmd), lowerPrefix) {
+			seen[cmd] = true
 			candidates = append(candidates, CompletionCandidate{
 				Text: cmd,
 				Type: TypeCommand,
 			})
+		}
+	}
+
+	// Then, add PATH executables (skip if already a builtin with same name)
+	pathCandidates := c.completePathExecutables(prefix)
+	for _, cand := range pathCandidates {
+		if !seen[cand.Text] {
+			seen[cand.Text] = true
+			candidates = append(candidates, cand)
 		}
 	}
 

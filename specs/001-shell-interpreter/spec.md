@@ -61,6 +61,7 @@ As a user, I want the shell to display inline suggestions as I type and allow me
 3. **Given** a partial file path `/home/us` is typed, **When** inline completion is triggered, **Then** the shell suggests the rest of the path (e.g., `er` for `/home/user`)
 4. **Given** multiple completions are possible, **When** user presses Tab twice, **Then** all possible completions are displayed as a list
 5. **Given** the user continues typing, **When** new characters are entered, **Then** the inline suggestion updates dynamically
+6. **Given** an external command exists in PATH (e.g., `vim`), **When** user types `vi`, **Then** the shell suggests `m` as ghost text (completing to `vim`)
 
 ---
 
@@ -446,6 +447,23 @@ As a user, I want to access and search my command history so that I can quickly 
   - Added `..` and `../` detection in `isPathLike()`
   - Added `hasExplicitDotDot` tracking for prefix preservation
   - Fixed double slash issue when completing `../` alone
+
+### Session 2025-11-29 (v1.2.1 Features)
+
+#### PATH Executable Completion
+
+- Q: How to autocomplete external commands from PATH? → A:
+  - Added `EnablePathCompletion(pathEnv string)` to Completer
+  - Scans each directory in PATH for executable files (mode & 0111)
+  - First occurrence in PATH wins (earlier directories have priority)
+  - Builtin commands take priority over PATH executables with same name
+  - Integration: `shell.createCompleter()` calls `EnablePathCompletion()` automatically
+
+- Q: What is the completion behavior? → A:
+  - Typing `vi` suggests `vim`, `view`, etc. from PATH
+  - Typing `pyt` suggests `python`, `python3`, etc.
+  - Builtins like `cd`, `ls` are never shadowed by PATH executables
+  - Results sorted alphabetically, builtins listed first
 
 ## Assumptions
 

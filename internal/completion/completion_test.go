@@ -566,3 +566,272 @@ func TestOptionCompletionDescription(t *testing.T) {
 		t.Errorf("Expected description 'Enable verbose output', got %q", candidates[0].Description)
 	}
 }
+
+// Tests for PATH executable completion
+func TestPathExecutableCompletion(t *testing.T) {
+	// Create temporary directories to simulate PATH
+	tmpDir1 := t.TempDir()
+	tmpDir2 := t.TempDir()
+
+	// Create executable files in first directory
+	exec1 := filepath.Join(tmpDir1, "myapp")
+	exec2 := filepath.Join(tmpDir1, "myutil")
+	os.WriteFile(exec1, []byte("#!/bin/bash\n"), 0755)
+	os.WriteFile(exec2, []byte("#!/bin/bash\n"), 0755)
+
+	// Create non-executable file (should not be completed)
+	nonExec := filepath.Join(tmpDir1, "mydata.txt")
+	os.WriteFile(nonExec, []byte("data"), 0644)
+
+	// Create executable in second directory
+	exec3 := filepath.Join(tmpDir2, "mytool")
+	os.WriteFile(exec3, []byte("#!/bin/bash\n"), 0755)
+
+	// Create duplicate executable in second directory (should be skipped)
+	exec4 := filepath.Join(tmpDir2, "myapp")
+	os.WriteFile(exec4, []byte("#!/bin/bash\n"), 0755)
+
+	// Build PATH string
+	pathEnv := tmpDir1 + string(os.PathListSeparator) + tmpDir2
+
+	c := NewCompleter([]string{"list", "help"})
+	c.EnablePathCompletion(pathEnv)
+
+	tests := []struct {
+		name      string
+		prefix    string
+		wantCount int
+		wantNames []string
+	}{
+		{
+			name:      "complete my prefix",
+			prefix:    "my",
+			wantCount: 3, // myapp, mytool, myutil (mydata.txt not executable, duplicate myapp skipped)
+			wantNames: []string{"myapp", "mytool", "myutil"},
+		},
+		{
+			name:      "complete myap prefix",
+			prefix:    "myap",
+			wantCount: 1, // myapp only
+			wantNames: []string{"myapp"},
+		},
+		{
+			name:      "complete myt prefix",
+			prefix:    "myt",
+			wantCount: 1, // mytool only
+			wantNames: []string{"mytool"},
+		},
+		{
+			name:      "no matches",
+			prefix:    "xyz",
+			wantCount: 0,
+			wantNames: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			candidates := c.completePathExecutables(tt.prefix)
+			if len(candidates) != tt.wantCount {
+				names := make([]string, len(candidates))
+				for i, cand := range candidates {
+					names[i] = cand.Text
+				}
+				t.Errorf("completePathExecutables(%q) returned %d candidates %v, want %d",
+					tt.prefix, len(candidates), names, tt.wantCount)
+			}
+
+			// Verify all expected names are present
+			for _, want := range tt.wantNames {
+				found := false
+				for _, cand := range candidates {
+					if cand.Text == want {
+						found = true
+						// Verify type
+						if cand.Type != TypeExecutable {
+							t.Errorf("candidate %q should be TypeExecutable, got %v", cand.Text, cand.Type)
+						}
+						break
+					}
+				}
+				if !found {
+					t.Errorf("expected candidate %q not found", want)
+				}
+			}
+		})
+	}
+}
+
+func TestCompleteCommandWithPath(t *testing.T) {
+	// Create temporary directory to simulate PATH
+	tmpDir := t.TempDir()
+
+	// Create executables
+	exec1 := filepath.Join(tmpDir, "vim")
+	exec2 := filepath.Join(tmpDir, "nano")
+	os.WriteFile(exec1, []byte("#!/bin/bash\n"), 0755)
+	os.WriteFile(exec2, []byte("#!/bin/bash\n"), 0755)
+
+	// Builtin commands
+	builtins := []string{"list", "help", "exit"}
+
+	c := NewCompleter(builtins)
+	c.EnablePathCompletion(tmpDir)
+
+	tests := []struct {
+		name      string
+		prefix    string
+		wantCount int
+		wantNames []string
+	}{
+		{
+			name:      "complete l - builtin only",
+			prefix:    "l",
+			wantCount: 1,
+			wantNames: []string{"list"},
+		},
+		{
+			name:      "complete v - PATH only",
+			prefix:    "v",
+			wantCount: 1,
+			wantNames: []string{"vim"},
+		},
+		{
+			name:      "complete n - PATH only",
+			prefix:    "n",
+			wantCount: 1,
+			wantNames: []string{"nano"},
+		},
+		{
+			name:      "empty prefix - all builtins and PATH executables",
+			prefix:    "",
+			wantCount: 5, // exit, help, list, nano, vim
+			wantNames: []string{"exit", "help", "list", "nano", "vim"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			candidates := c.CompleteCommand(tt.prefix)
+			if len(candidates) != tt.wantCount {
+				names := make([]string, len(candidates))
+				for i, cand := range candidates {
+					names[i] = cand.Text
+				}
+				t.Errorf("CompleteCommand(%q) returned %d candidates %v, want %d",
+					tt.prefix, len(candidates), names, tt.wantCount)
+			}
+
+			// Verify expected names
+			for _, want := range tt.wantNames {
+				found := false
+				for _, cand := range candidates {
+					if cand.Text == want {
+						found = true
+						break
+					}
+				}
+				if !found {
+					names := make([]string, len(candidates))
+					for i, cand := range candidates {
+						names[i] = cand.Text
+					}
+					t.Errorf("expected candidate %q not found in %v", want, names)
+				}
+			}
+		})
+	}
+}
+
+func TestBuiltinTakesPriorityOverPath(t *testing.T) {
+	// Create temporary directory with an executable named "help"
+	tmpDir := t.TempDir()
+	exec := filepath.Join(tmpDir, "help")
+	os.WriteFile(exec, []byte("#!/bin/bash\n"), 0755)
+
+	// Builtin "help" should take priority
+	c := NewCompleter([]string{"help"})
+	c.EnablePathCompletion(tmpDir)
+
+	candidates := c.CompleteCommand("hel")
+
+	if len(candidates) != 1 {
+		t.Fatalf("Expected 1 candidate, got %d", len(candidates))
+	}
+
+	if candidates[0].Text != "help" {
+		t.Errorf("Expected 'help', got %q", candidates[0].Text)
+	}
+
+	// Should be TypeCommand (builtin), not TypeExecutable
+	if candidates[0].Type != TypeCommand {
+		t.Errorf("Expected TypeCommand for builtin, got %v", candidates[0].Type)
+	}
+}
+
+func TestDisablePathCompletion(t *testing.T) {
+	tmpDir := t.TempDir()
+	exec := filepath.Join(tmpDir, "myexec")
+	os.WriteFile(exec, []byte("#!/bin/bash\n"), 0755)
+
+	c := NewCompleter([]string{"list"})
+	c.EnablePathCompletion(tmpDir)
+
+	// Should find PATH executables
+	candidates := c.CompleteCommand("my")
+	if len(candidates) != 1 {
+		t.Errorf("Expected 1 candidate with PATH enabled, got %d", len(candidates))
+	}
+
+	// Disable PATH completion
+	c.DisablePathCompletion()
+
+	// Should not find PATH executables
+	candidates = c.CompleteCommand("my")
+	if len(candidates) != 0 {
+		t.Errorf("Expected 0 candidates with PATH disabled, got %d", len(candidates))
+	}
+}
+
+func TestPathCompletionEmptyPath(t *testing.T) {
+	c := NewCompleter([]string{"list"})
+	c.EnablePathCompletion("") // Uses os.Getenv("PATH")
+
+	// Should not panic and should work with system PATH
+	candidates := c.CompleteCommand("l")
+	if len(candidates) < 1 {
+		t.Error("Expected at least 'list' builtin")
+	}
+
+	// Verify 'list' is in candidates
+	found := false
+	for _, cand := range candidates {
+		if cand.Text == "list" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected 'list' to be in candidates")
+	}
+}
+
+func TestInlineSuggestionWithPathExecutable(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create unique executables
+	exec := filepath.Join(tmpDir, "uniqueexecname")
+	os.WriteFile(exec, []byte("#!/bin/bash\n"), 0755)
+
+	c := NewCompleter([]string{"list"})
+	c.EnablePathCompletion(tmpDir)
+
+	// Test inline suggestion for PATH executable
+	suggestion, has := c.InlineSuggestion("unique")
+	if !has {
+		t.Error("Expected inline suggestion for 'unique'")
+	}
+	if suggestion != "execname" {
+		t.Errorf("Expected suggestion 'execname', got %q", suggestion)
+	}
+}
